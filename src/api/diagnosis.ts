@@ -27,16 +27,14 @@ export async function clearPendingImages() {
  - 반환값은 historyId
  - 동시에 히스토리 저장(createHistory)까지 수행해서, result 화면이 id 기반으로 조회 가능 */
 /**
- * 진단 시작
- *
- * Backend1 연동 포인트(권장)
- * - POST /api/diagnoses
- *   - req: multipart/form-data(images[])
- *   - res: { historyId, diagnosisId, issueType, riskScore, recommendation, ... }
- * - 이후 historyId로 GET /api/histories/{id} 조회 가능
- *
- * 현재 구현은 "로컬 mock"이며, 결과를 AsyncStorage 히스토리에 저장하고
- * 동시에 리포트 초안을 ensureReportForHistory로 생성합니다.
+ 진단 시작
+ Backend1 연동 포인트(권장)
+ - POST /api/diagnoses
+   - req: multipart/form-data(images[])
+   - res: { historyId, diagnosisId, issueType, riskScore, recommendation, ... }
+ - 이후 historyId로 GET /api/histories/{id} 조회 가능
+  현재 구현은 "로컬 mock"이며, 결과를 AsyncStorage 히스토리에 저장하고
+  동시에 리포트 초안을 ensureReportForHistory로 생성합니다.
  */
 export async function startDiagnosis(): Promise<{ historyId: string }> {
   // TODO(Backend1): 서버에 이미지 업로드 → 분석 결과 받기

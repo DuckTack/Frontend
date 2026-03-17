@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Linking, Alert, ScrollView } from "react-native";
 import ScreenState from "@/src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -30,12 +30,21 @@ export default function Diy() {
     load();
   }, [historyId, issueType]);
 
+  async function openBuyUrl(url?: string) {
+    if (!url) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("링크 열기 실패", "외부 링크를 열 수 없습니다.");
+    }
+  }
+
   if (loading || !guide) {
     return <ScreenState loading />;
   }
 
   return (
-    <View style={{ flex: 1, padding: 20, gap: 12 }}>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 12 }}>
       <Text style={{ fontSize: 22, fontWeight: "800" }}>DIY 가이드</Text>
       <Text style={{ opacity: 0.7 }}>{guide.title}</Text>
 
@@ -57,12 +66,22 @@ export default function Diy() {
       ) : null}
 
       {guide.materials && guide.materials.length > 0 ? (
-        <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, gap: 8 }}>
+        <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, gap: 10 }}>
           <Text style={{ fontWeight: "800" }}>추천 자재/도구</Text>
           {guide.materials.map((m) => (
-            <View key={m.name} style={{ gap: 2 }}>
-              <Text>• {m.name}{m.approxCost ? ` (${m.approxCost})` : ""}</Text>
-              {m.note ? <Text style={{ opacity: 0.7, marginLeft: 10 }}>- {m.note}</Text> : null}
+            <View key={m.name} style={{ gap: 6, paddingBottom: 8, borderBottomWidth: 1, borderColor: "#e5e7eb" }}>
+              <View style={{ gap: 2 }}>
+                <Text>• {m.name}{m.approxCost ? ` (${m.approxCost})` : ""}</Text>
+                {m.note ? <Text style={{ opacity: 0.7, marginLeft: 10 }}>- {m.note}</Text> : null}
+              </View>
+              {m.buyUrl ? (
+                <Pressable
+                  onPress={() => openBuyUrl(m.buyUrl)}
+                  style={{ alignSelf: "flex-start", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 }}
+                >
+                  <Text style={{ fontWeight: "700" }}>구매 링크 보기</Text>
+                </Pressable>
+              ) : null}
             </View>
           ))}
         </View>
@@ -71,6 +90,6 @@ export default function Diy() {
       <Pressable onPress={() => router.back()} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 12, alignItems: "center" }}>
         <Text>뒤로</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
