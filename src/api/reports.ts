@@ -2,25 +2,23 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { IssueType, Recommendation } from "./histories";
 
 /**
- * 리포트(PDF/증빙)
- *
- * 컨셉: "자동 생성(초안) + 사용자 보완(Draft)" → 제출용(READY)
- *
- * Backend2 연동 포인트(권장)
- * - POST /api/reports/from-history/{historyId}  : 초안 생성
- * - GET  /api/reports                           : 내 리포트 목록
- * - GET  /api/reports/{reportId}                : 리포트 상세
- * - PUT  /api/reports/{reportId}                : Draft 저장(전/후사진/비용 등)
- * - POST /api/reports/{reportId}/submit         : READY 전환
- * - GET  /api/reports/{reportId}/pdf            : PDF 다운로드(또는 presigned URL)
- * - POST /api/reports/{reportId}/share          : 공유 링크 발급
+ 리포트(PDF/증빙)
+ 컨셉: "자동 생성(초안) + 사용자 보완(Draft)" → 제출용(READY)
+ Backend2 연동 포인트(권장)
+ - POST /api/reports/from-history/{historyId}  : 초안 생성
+ - GET  /api/reports                           : 내 리포트 목록
+ - GET  /api/reports/{reportId}                : 리포트 상세
+ - PUT  /api/reports/{reportId}                : Draft 저장(전/후사진/비용 등)
+ - POST /api/reports/{reportId}/submit         : READY 전환
+ - GET  /api/reports/{reportId}/pdf            : PDF 다운로드(또는 presigned URL)
+ - POST /api/reports/{reportId}/share          : 공유 링크 발급
  */
 
 export type ReportStatus = "NONE" | "GENERATING" | "READY" | "FAILED";
 
 /**
- * 마이페이지 "리포트 내역"은 히스토리 기반으로 보여주되,
- * PDF 생성 상태(READY/GENERATING 등)를 추가로 붙여서 UX를 만듭니다.
+ 마이페이지 "리포트 내역"은 히스토리 기반으로 보여주되,
+ PDF 생성 상태(READY/GENERATING 등)를 추가로 붙여서 UX를 만듭니다.
  */
 export type MyReportItem = {
   reportId: string; // 리포트 식별자(없으면 historyId를 써도 됨)
@@ -40,10 +38,10 @@ export type MyReportItem = {
 };
 
 /**
- * ✅ "자동 + 사용자 보완" 모델
- * - 자동 채움(진단 결과/프로필)은 history/users에서 가져와서 표시
- * - 사용자가 입력해야만 알 수 있는(조치/비용/전후사진 등) 필드는 Draft로 로컬 저장(지금은 AsyncStorage)
- * - Backend2가 오면 Draft 저장/조회만 서버로 옮기면 됨(화면 코드는 거의 유지)
+ ✅ "자동 + 사용자 보완" 모델
+ - 자동 채움(진단 결과/프로필)은 history/users에서 가져와서 표시
+ - 사용자가 입력해야만 알 수 있는(조치/비용/전후사진 등) 필드는 Draft로 로컬 저장(지금은 AsyncStorage)
+ - Backend2가 오면 Draft 저장/조회만 서버로 옮기면 됨(화면 코드는 거의 유지)
  */
 export type ReportDraft = {
   reportId: string;
@@ -253,9 +251,9 @@ export async function listMyReports(): Promise<MyReportItem[]> {
 }
 
 /**
- * 히스토리 목록에서 "리포트(PDF) 상태"를 바로 보여주기 위한 헬퍼.
- * - key: historyId
- * - value: ReportStatus (NONE/GENERATING/READY/FAILED)
+ 히스토리 목록에서 "리포트(PDF) 상태"를 바로 보여주기 위한 헬퍼.
+ - key: historyId
+ - value: ReportStatus (NONE/GENERATING/READY/FAILED)
  */
 export async function getReportStatusMapForHistoryIds(
   historyIds: string[]

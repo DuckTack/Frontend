@@ -24,8 +24,7 @@ export default function Login() {
       const data = await login({ username, password });
       await saveAccessToken(data.accessToken);
 
-      // 로그인 성공 시 탭의 홈으로 이동
-      router.replace("/(tabs)");
+      router.replace("/(tabs)?intro=1");
     } catch (e: any) {
       Alert.alert("로그인 실패", "아이디/비밀번호 또는 서버 상태를 확인해주세요.");
     } finally {
@@ -70,7 +69,7 @@ export default function Login() {
       <Pressable
         onPress={async () => {
           await saveDevToken();
-          router.replace("/(tabs)");
+          router.replace("/(tabs)?intro=1");
         }}
         style={{
           paddingVertical: 12,

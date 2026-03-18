@@ -1,12 +1,10 @@
-/**
- * Axios 공통 클라이언트
- *
- * - baseURL: EXPO_PUBLIC_API_BASE_URL 환경변수 사용
- * - 모든 요청에 Authorization: Bearer <token> 자동 주입
- *
- * Backend 연동 시 체크:
- * - 실제 서버 주소를 EXPO_PUBLIC_API_BASE_URL로 주입했는지
- * - 토큰 포맷이 Bearer가 맞는지(백엔드 요구사항 확인)
+/* 
+ Axios 공통 클라이언트
+ - baseURL: EXPO_PUBLIC_API_BASE_URL 환경변수 사용
+ - 모든 요청에 Authorization: Bearer <token> 자동 주입
+ Backend 연동 시 체크:
+ - 실제 서버 주소를 EXPO_PUBLIC_API_BASE_URL로 주입했는지
+ - 토큰 포맷이 Bearer가 맞는지(백엔드 요구사항 확인)
  */
 import axios from "axios";
 import { getAccessToken, clearAccessToken } from "@/src/store/tokenStorage";

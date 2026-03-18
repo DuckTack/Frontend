@@ -1,15 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/**
- * 히스토리(진단 기록)
- *
- * Backend1 연동 포인트
- * - GET /api/histories            : 내 진단 기록 목록
- * - GET /api/histories/{id}       : 진단 기록 상세
- * - DELETE /api/histories         : 선택 삭제(예: { ids: [...] })
- *
- * 현재 구현은 Backend 미연동 상태에서도 앱이 깨지지 않도록
- * AsyncStorage를 "로컬 DB"처럼 사용합니다.
+/*
+ 히스토리(진단 기록)
+ Backend1 연동 포인트
+ - GET /api/histories            : 내 진단 기록 목록
+ - GET /api/histories/{id}       : 진단 기록 상세
+ - DELETE /api/histories         : 선택 삭제(예: { ids: [...] })
+ 현재 구현은 Backend 미연동 상태에서도 앱이 깨지지 않도록
+ AsyncStorage를 "로컬 DB"처럼 사용합니다.
  */
 
 export type IssueType = "CRACK" | "LEAK" | "MOLD" | "ETC";
@@ -19,8 +17,8 @@ export type Recommendation = "DIY" | "PRO";
 
 export type HistorySummary = {
   /**
-   * Some versions of the app used `id`, others used `historyId`.
-   * Keep both optional for backward compatibility.
+   Some versions of the app used `id`, others used `historyId`.
+   Keep both optional for backward compatibility.
    */
   id?: string | number;
   historyId?: string | number;
@@ -33,8 +31,8 @@ export type HistorySummary = {
   imageUris?: string[];
 
   /**
-   * 아래 필드들은 "상세(결과 화면)"에서 쓰이는 진단 결과 필드입니다.
-   * Backend1 연동 시 /api/histories/{id} 응답에 포함되면 그대로 매핑하면 됩니다.
+   아래 필드들은 "상세(결과 화면)"에서 쓰이는 진단 결과 필드입니다.
+   Backend1 연동 시 /api/histories/{id} 응답에 포함되면 그대로 매핑하면 됩니다.
    */
   recommendation?: Recommendation;
   cause?: string;

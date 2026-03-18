@@ -1,58 +1,51 @@
-import { useState } from "react";
-import { View, Text, TextInput, Pressable, Alert } from "react-native";
+import { useMemo, useState } from "react";
+import { View, Text, TextInput, Pressable, Alert, ScrollView } from "react-native";
 import { router, Stack } from "expo-router";
 
-import { checkUsernameAvailable, signup } from "@/src/api/auth";
+import {
+  checkEmailAvailable,
+  checkPhoneAvailable,
+  checkUsernameAvailable,
+  sendEmailVerificationCode,
+  signup,
+  verifyEmailCode,
+} from "@/src/api/auth";
+
+const RESIDENCE_LABELS = {
+  ONE_ROOM: "원룸",
+  APARTMENT: "아파트",
+  VILLA: "빌라",
+  OFFICETEL: "오피스텔",
+  OTHER: "기타",
+} as const;
 
 export default function Signup() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [email, setEmail] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+
   const [usernameChecked, setUsernameChecked] = useState<boolean | null>(null);
+  const [phoneChecked, setPhoneChecked] = useState<boolean | null>(null);
+  const [emailChecked, setEmailChecked] = useState<boolean | null>(null);
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+
   const [checkingUsername, setCheckingUsername] = useState(false);
+  const [checkingPhone, setCheckingPhone] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [verifyingEmailCode, setVerifyingEmailCode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [residenceType, setResidenceType] = useState<
     "ONE_ROOM" | "APARTMENT" | "VILLA" | "OFFICETEL" | "OTHER"
   >("ONE_ROOM");
   const [isRenter, setIsRenter] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleSignup() {
-    if (!username || !password) {
-      Alert.alert("입력 필요", "아이디와 비밀번호를 입력해주세요.");
-      return;
-    }
-
-    if (passwordConfirm.length === 0) {
-      Alert.alert("입력 필요", "비밀번호 재확인을 입력해주세요.");
-      return;
-    }
-
-    if (password !== passwordConfirm) {
-      Alert.alert("비밀번호 확인", "비밀번호와 재확인이 일치하지 않습니다.");
-      return;
-    }
-
-    if (usernameChecked !== true) {
-      Alert.alert("아이디 확인", "회원가입 전에 아이디 중복검사를 완료해주세요.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      await signup({ username, password, phoneNumber: phoneNumber.trim() || undefined, residenceType, isRenter });
-      Alert.alert("회원가입 성공", "회원가입이 완료되었습니다. 로그인해주세요.");
-      router.push("/login");
-    } catch (e: any) {
-      if (String(e?.message) === "USERNAME_TAKEN") {
-        Alert.alert("회원가입 실패", "이미 사용 중인 아이디입니다.");
-      } else {
-        Alert.alert("회원가입 실패", "입력한 정보 또는 서버 상태를 확인해주세요.");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  const normalizedPhone = useMemo(() => phoneNumber.replace(/[^0-9]/g, ""), [phoneNumber]);
 
   async function handleCheckUsername() {
     const trimmed = username.trim();
@@ -72,8 +65,158 @@ export default function Signup() {
     }
   }
 
+  async function handleCheckPhone() {
+    if (!normalizedPhone) {
+      Alert.alert("입력 필요", "휴대폰 번호를 먼저 입력해주세요.");
+      return;
+    }
+    try {
+      setCheckingPhone(true);
+      const ok = await checkPhoneAvailable(normalizedPhone);
+      setPhoneChecked(ok);
+      Alert.alert("휴대폰 번호 확인", ok ? "사용 가능한 휴대폰 번호입니다." : "이미 사용 중인 휴대폰 번호입니다.");
+    } catch {
+      Alert.alert("확인 실패", "잠시 후 다시 시도해주세요.");
+    } finally {
+      setCheckingPhone(false);
+    }
+  }
+
+  async function handleCheckEmail() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      Alert.alert("입력 필요", "이메일을 먼저 입력해주세요.");
+      return;
+    }
+    try {
+      setCheckingEmail(true);
+      const ok = await checkEmailAvailable(trimmed);
+      setEmailChecked(ok);
+      setEmailCodeSent(false);
+      setEmailVerified(false);
+      Alert.alert("이메일 확인", ok ? "사용 가능한 이메일입니다." : "이미 사용 중인 이메일입니다.");
+    } catch {
+      Alert.alert("확인 실패", "잠시 후 다시 시도해주세요.");
+    } finally {
+      setCheckingEmail(false);
+    }
+  }
+
+  async function handleSendEmailCode() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      Alert.alert("입력 필요", "이메일을 먼저 입력해주세요.");
+      return;
+    }
+    if (emailChecked !== true) {
+      Alert.alert("이메일 확인", "이메일 중복검사를 먼저 완료해주세요.");
+      return;
+    }
+    try {
+      setSendingEmailCode(true);
+      const result = await sendEmailVerificationCode(trimmed);
+      setEmailCodeSent(true);
+      setEmailVerified(false);
+      if (result.devCode) {
+        Alert.alert("인증코드 발송", `개발용 인증코드: ${result.devCode}`);
+      } else {
+        Alert.alert("인증코드 발송", "인증코드를 이메일로 보냈습니다.");
+      }
+    } catch {
+      Alert.alert("발송 실패", "잠시 후 다시 시도해주세요.");
+    } finally {
+      setSendingEmailCode(false);
+    }
+  }
+
+  async function handleVerifyEmail() {
+    if (!emailCodeSent) {
+      Alert.alert("이메일 인증", "먼저 인증코드를 발송해주세요.");
+      return;
+    }
+    if (!verificationCode.trim()) {
+      Alert.alert("입력 필요", "인증코드를 입력해주세요.");
+      return;
+    }
+    try {
+      setVerifyingEmailCode(true);
+      const ok = await verifyEmailCode(email.trim(), verificationCode.trim());
+      setEmailVerified(ok);
+      Alert.alert("이메일 인증", ok ? "이메일 인증이 완료되었습니다." : "인증코드를 다시 확인해주세요.");
+    } catch {
+      Alert.alert("인증 실패", "잠시 후 다시 시도해주세요.");
+    } finally {
+      setVerifyingEmailCode(false);
+    }
+  }
+
+  async function handleSignup() {
+    if (!username.trim() || !password) {
+      Alert.alert("입력 필요", "아이디와 비밀번호를 입력해주세요.");
+      return;
+    }
+    if (!email.trim()) {
+      Alert.alert("입력 필요", "이메일을 입력해주세요.");
+      return;
+    }
+    if (passwordConfirm.length === 0) {
+      Alert.alert("입력 필요", "비밀번호 재확인을 입력해주세요.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      Alert.alert("비밀번호 확인", "비밀번호와 재확인이 일치하지 않습니다.");
+      return;
+    }
+    if (usernameChecked !== true) {
+      Alert.alert("아이디 확인", "아이디 중복검사를 완료해주세요.");
+      return;
+    }
+    if (normalizedPhone && phoneChecked !== true) {
+      Alert.alert("휴대폰 번호 확인", "휴대폰 번호를 입력했다면 중복검사를 완료해주세요.");
+      return;
+    }
+    if (emailChecked !== true) {
+      Alert.alert("이메일 확인", "이메일 중복검사를 완료해주세요.");
+      return;
+    }
+    if (!emailVerified) {
+      Alert.alert("이메일 인증", "이메일 인증을 완료해주세요.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await signup({
+        username: username.trim(),
+        password,
+        email: email.trim().toLowerCase(),
+        phoneNumber: normalizedPhone || undefined,
+        residenceType,
+        isRenter,
+        emailVerified: true,
+      });
+      Alert.alert("회원가입 성공", "회원가입이 완료되었습니다. 로그인해주세요.");
+      router.replace("/login");
+    } catch (e: any) {
+      const message = String(e?.message ?? "");
+      if (message === "USERNAME_TAKEN") {
+        Alert.alert("회원가입 실패", "이미 사용 중인 아이디입니다.");
+      } else if (message === "PHONE_TAKEN") {
+        Alert.alert("회원가입 실패", "이미 사용 중인 휴대폰 번호입니다.");
+      } else if (message === "EMAIL_TAKEN") {
+        Alert.alert("회원가입 실패", "이미 사용 중인 이메일입니다.");
+      } else if (message === "EMAIL_NOT_VERIFIED") {
+        Alert.alert("회원가입 실패", "이메일 인증을 먼저 완료해주세요.");
+      } else {
+        Alert.alert("회원가입 실패", "입력한 정보 또는 서버 상태를 확인해주세요.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
-    <View style={{ flex: 1, justifyContent: "center", padding: 20, gap: 12 }}>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20, gap: 12 }}>
       <Text style={{ fontSize: 26, fontWeight: "700", textAlign: "center" }}>회원가입</Text>
 
       <TextInput
@@ -86,7 +229,6 @@ export default function Signup() {
         autoCapitalize="none"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-
       <Pressable
         onPress={handleCheckUsername}
         disabled={checkingUsername}
@@ -97,11 +239,65 @@ export default function Signup() {
 
       <TextInput
         value={phoneNumber}
-        onChangeText={setPhoneNumber}
-        placeholder="전화번호(선택) 예) 01012345678"
+        onChangeText={(t) => {
+          setPhoneNumber(t);
+          setPhoneChecked(null);
+        }}
+        placeholder="휴대폰 번호(선택) 예) 01012345678"
         keyboardType="phone-pad"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
+      <Pressable
+        onPress={handleCheckPhone}
+        disabled={checkingPhone || !normalizedPhone}
+        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingPhone || !normalizedPhone ? 0.6 : 1 }}
+      >
+        <Text>{checkingPhone ? "확인 중..." : "휴대폰 번호 중복검사"}</Text>
+      </Pressable>
+
+      <TextInput
+        value={email}
+        onChangeText={(t) => {
+          setEmail(t);
+          setEmailChecked(null);
+          setEmailCodeSent(false);
+          setEmailVerified(false);
+        }}
+        placeholder="이메일"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
+      />
+      <Pressable
+        onPress={handleCheckEmail}
+        disabled={checkingEmail}
+        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingEmail ? 0.6 : 1 }}
+      >
+        <Text>{checkingEmail ? "확인 중..." : "이메일 중복검사"}</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={handleSendEmailCode}
+        disabled={sendingEmailCode || emailChecked !== true}
+        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: sendingEmailCode || emailChecked !== true ? 0.6 : 1 }}
+      >
+        <Text>{sendingEmailCode ? "발송 중..." : "이메일 인증코드 발송"}</Text>
+      </Pressable>
+
+      <TextInput
+        value={verificationCode}
+        onChangeText={setVerificationCode}
+        placeholder="이메일 인증코드"
+        keyboardType="number-pad"
+        style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
+      />
+      <Pressable
+        onPress={handleVerifyEmail}
+        disabled={verifyingEmailCode || !emailCodeSent}
+        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: verifyingEmailCode || !emailCodeSent ? 0.6 : 1 }}
+      >
+        <Text>{verifyingEmailCode ? "확인 중..." : "이메일 인증 확인"}</Text>
+      </Pressable>
 
       <TextInput
         value={password}
@@ -119,7 +315,6 @@ export default function Signup() {
           secureTextEntry
           style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
         />
-
         {passwordConfirm.length > 0 && (
           <Text style={{ fontSize: 12, opacity: 0.9 }}>
             {password === passwordConfirm ? "✅ 비밀번호가 일치합니다." : "❌ 비밀번호가 일치하지 않습니다."}
@@ -138,26 +333,20 @@ export default function Signup() {
               paddingHorizontal: 12,
               borderWidth: 1,
               borderRadius: 10,
-              opacity: residenceType === t ? 1 : 0.5,
+              opacity: residenceType === t ? 1 : 0.55,
             }}
           >
-            <Text>{t}</Text>
+            <Text>{RESIDENCE_LABELS[t]}</Text>
           </Pressable>
         ))}
       </View>
 
       <Text style={{ marginTop: 8, fontWeight: "600" }}>임대 여부</Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
-        <Pressable
-          onPress={() => setIsRenter(true)}
-          style={{ padding: 10, borderWidth: 1, borderRadius: 10, opacity: isRenter ? 1 : 0.5 }}
-        >
+        <Pressable onPress={() => setIsRenter(true)} style={{ padding: 10, borderWidth: 1, borderRadius: 10, opacity: isRenter ? 1 : 0.5 }}>
           <Text>임대</Text>
         </Pressable>
-        <Pressable
-          onPress={() => setIsRenter(false)}
-          style={{ padding: 10, borderWidth: 1, borderRadius: 10, opacity: !isRenter ? 1 : 0.5 }}
-        >
+        <Pressable onPress={() => setIsRenter(false)} style={{ padding: 10, borderWidth: 1, borderRadius: 10, opacity: !isRenter ? 1 : 0.5 }}>
           <Text>자가</Text>
         </Pressable>
       </View>
@@ -182,6 +371,6 @@ export default function Signup() {
       </Pressable>
 
       <Stack.Screen options={{ headerShown: false }} />
-    </View>
+    </ScrollView>
   );
 }
