@@ -1,63 +1,43 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiClient } from "./apiClient";
 
-/*
- 히스토리(진단 기록)
- Backend1 연동 포인트
- - GET /api/histories            : 내 진단 기록 목록
- - GET /api/histories/{id}       : 진단 기록 상세
- - DELETE /api/histories         : 선택 삭제(예: { ids: [...] })
- 현재 구현은 Backend 미연동 상태에서도 앱이 깨지지 않도록
- AsyncStorage를 "로컬 DB"처럼 사용합니다.
- */
-
-export type IssueType = "CRACK" | "LEAK" | "MOLD" | "ETC";
+export type IssueType = "CRACK" | "LEAK" | "MOLD" | "DAMAGE" | "ELECTRIC" | "GAS" | "ETC";
 export type DiagnosisStatus = "ANALYZING" | "COMPLETED" | "FAILED";
-// 진단 결과에 따른 추천 액션
 export type Recommendation = "DIY" | "PRO";
 
 export type HistorySummary = {
-  /**
-   Some versions of the app used `id`, others used `historyId`.
-   Keep both optional for backward compatibility.
-   */
   id?: string | number;
   historyId?: string | number;
-
   diagnosisId?: string | number;
   status: DiagnosisStatus;
   riskScore: number;
   issueType: IssueType;
   createdAt: string;
   imageUris?: string[];
-
-  /**
-   아래 필드들은 "상세(결과 화면)"에서 쓰이는 진단 결과 필드입니다.
-   Backend1 연동 시 /api/histories/{id} 응답에 포함되면 그대로 매핑하면 됩니다.
-   */
   recommendation?: Recommendation;
   cause?: string;
   naturalOrHuman?: string;
   caution?: string;
+  report?: { storageKey: string; contentType: string; sizeBytes: number } | null;
 };
 
-export type HistoryDetail = HistorySummary & {
-  // add extra fields as needed
-};
+export type HistoryDetail = HistorySummary;
 
-const STORAGE_KEYS = [
-  "histories_v1",
-  "histories", // legacy
-  "HISTORIES", // legacy (rare)
-];
+type LocalHistoryExtras = Pick<HistoryDetail, "imageUris" | "cause" | "naturalOrHuman" | "caution">;
+
+const STORAGE_KEYS = ["histories_v1", "histories", "HISTORIES"];
+const HISTORY_EXTRAS_KEY = "history_extras_v1";
 
 function normalizeId(h: HistorySummary): string {
   const raw = (h.historyId ?? h.id ?? h.diagnosisId) as any;
   return String(raw ?? "");
 }
 
+function toRecommendation(riskScore: number): Recommendation {
+  return riskScore >= 70 ? "PRO" : "DIY";
+}
+
 function seedMockIfEmpty(): HistorySummary[] {
-  // Minimal seed so Histories never renders empty in DEV while backend isn't connected.
-  // If you already have real saved histories, we won't use this.
   return [
     {
       historyId: "seed-1",
@@ -65,6 +45,7 @@ function seedMockIfEmpty(): HistorySummary[] {
       status: "COMPLETED",
       riskScore: 62,
       issueType: "MOLD",
+      recommendation: "DIY",
       createdAt: new Date().toISOString(),
       imageUris: [],
     },
@@ -89,39 +70,117 @@ async function writePrimary(items: HistorySummary[]) {
   await AsyncStorage.setItem(STORAGE_KEYS[0], JSON.stringify(items));
 }
 
+async function readExtrasMap(): Promise<Record<string, LocalHistoryExtras>> {
+  const raw = await AsyncStorage.getItem(HISTORY_EXTRAS_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, LocalHistoryExtras>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeExtrasMap(map: Record<string, LocalHistoryExtras>) {
+  await AsyncStorage.setItem(HISTORY_EXTRAS_KEY, JSON.stringify(map));
+}
+
+export async function saveHistoryExtras(historyId: string | number, extras: LocalHistoryExtras): Promise<void> {
+  const map = await readExtrasMap();
+  map[String(historyId)] = extras;
+  await writeExtrasMap(map);
+}
+
+async function withExtras(item: HistorySummary): Promise<HistorySummary> {
+  const map = await readExtrasMap();
+  const id = normalizeId(item);
+  const extras = map[id] ?? {};
+  return {
+    ...item,
+    recommendation: item.recommendation ?? toRecommendation(item.riskScore),
+    imageUris: item.imageUris ?? extras.imageUris ?? [],
+    cause: item.cause ?? extras.cause,
+    naturalOrHuman: item.naturalOrHuman ?? extras.naturalOrHuman,
+    caution: item.caution ?? extras.caution,
+  };
+}
+
+function normalizeBackendHistory(raw: any): HistorySummary {
+  const riskScore = Number(raw?.riskScore ?? 0);
+  return {
+    historyId: raw?.id,
+    id: raw?.id,
+    diagnosisId: raw?.diagnosisId,
+    status: raw?.status ?? "ANALYZING",
+    riskScore,
+    issueType: raw?.issueType ?? "ETC",
+    createdAt: raw?.createdAt ?? new Date().toISOString(),
+    recommendation: toRecommendation(riskScore),
+    report: raw?.report ?? null,
+  };
+}
+
 export async function listHistories(): Promise<HistorySummary[]> {
-  const items = await readFirstAvailable();
-  if (items.length > 0) {
-    // Ensure IDs are stable and status exists
-    return items.map((h) => ({
-      ...h,
-      status: (h as any).status ?? "COMPLETED",
-      historyId: h.historyId ?? h.id,
-      id: h.id ?? h.historyId ?? h.diagnosisId,
-    }));
+  try {
+    const res = await apiClient.get("/api/histories", {
+      params: {
+        page: 0,
+        size: 50,
+        sort: "createdAt,desc",
+      },
+    });
+    const body = res.data;
+    const page = body?.data ?? body;
+    const items = Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : [];
+    if (items.length > 0) {
+      const normalized = await Promise.all(items.map((h: any) => withExtras(normalizeBackendHistory(h))));
+      await writePrimary(normalized);
+      return normalized;
+    }
+  } catch {
+    // fallback below
   }
 
-  // If nothing saved yet, return a seed mock to avoid blank UI
+  const items = await readFirstAvailable();
+  if (items.length > 0) {
+    return Promise.all(
+      items.map((h) =>
+        withExtras({
+          ...h,
+          status: (h as any).status ?? "COMPLETED",
+          historyId: h.historyId ?? h.id,
+          id: h.id ?? h.historyId ?? h.diagnosisId,
+        })
+      )
+    );
+  }
+
   const seed = seedMockIfEmpty();
   await writePrimary(seed);
   return seed;
 }
 
 export async function getHistoryDetail(historyId: string | number): Promise<HistoryDetail> {
-  const all = await listHistories();
-  const found = all.find((h) => normalizeId(h) === String(historyId));
-  if (found) return found;
-  // fallback
-  return {
-    historyId,
-    id: historyId,
-    diagnosisId: String(historyId),
-    status: "COMPLETED",
-    riskScore: 0,
-    issueType: "ETC",
-    createdAt: new Date().toISOString(),
-    imageUris: [],
-  };
+  try {
+    const res = await apiClient.get(`/api/histories/${historyId}`);
+    const body = res.data;
+    const normalized = normalizeBackendHistory(body?.data ?? body);
+    return await withExtras(normalized);
+  } catch {
+    const all = await listHistories();
+    const found = all.find((h) => normalizeId(h) === String(historyId));
+    if (found) return found;
+    return {
+      historyId,
+      id: historyId,
+      diagnosisId: String(historyId),
+      status: "COMPLETED",
+      riskScore: 0,
+      issueType: "ETC",
+      recommendation: "DIY",
+      createdAt: new Date().toISOString(),
+      imageUris: [],
+    };
+  }
 }
 
 export async function createHistory(input: Omit<HistorySummary, "createdAt"> & { createdAt?: string }): Promise<HistorySummary> {
@@ -132,9 +191,9 @@ export async function createHistory(input: Omit<HistorySummary, "createdAt"> & {
     createdAt: input.createdAt ?? new Date().toISOString(),
     historyId: input.historyId ?? input.id ?? `h-${Date.now()}`,
     id: (input.id ?? input.historyId) as any,
+    recommendation: input.recommendation ?? toRecommendation(input.riskScore),
   };
 
-  // id가 비어있으면 historyId로 통일
   newItem.id = newItem.id ?? newItem.historyId;
 
   const merged = [newItem, ...all].reduce<HistorySummary[]>((acc, cur) => {
@@ -146,10 +205,24 @@ export async function createHistory(input: Omit<HistorySummary, "createdAt"> & {
   }, []);
 
   await writePrimary(merged);
+  await saveHistoryExtras(String(newItem.historyId ?? newItem.id), {
+    imageUris: newItem.imageUris ?? [],
+    cause: newItem.cause,
+    naturalOrHuman: newItem.naturalOrHuman,
+    caution: newItem.caution,
+  });
   return newItem;
 }
 
 export async function deleteHistory(historyId: string | number): Promise<void> {
+  try {
+    await apiClient.delete("/api/histories", {
+      data: { ids: [Number(historyId)] },
+    });
+  } catch {
+    // fallback below
+  }
+
   const all = await listHistories();
   const filtered = all.filter((h) => normalizeId(h) !== String(historyId));
   await writePrimary(filtered);

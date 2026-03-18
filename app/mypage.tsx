@@ -11,12 +11,14 @@ function residenceLabel(t: ResidenceType) {
   switch (t) {
     case "ONE_ROOM":
       return "원룸";
-    case "APARTMENT":
+    case "APT":
       return "아파트";
     case "VILLA":
       return "빌라";
     case "OFFICETEL":
       return "오피스텔";
+    case "HOUSE":
+      return "주택";
     default:
       return "기타";
   }
@@ -28,8 +30,10 @@ function rentLabel(t: RentType) {
       return "월세";
     case "JEONSE":
       return "전세";
-    default:
+    case "SALE":
       return "매매";
+    default:
+      return "미정";
   }
 }
 
@@ -41,6 +45,12 @@ function issueLabel(t: MyReportItem["issueType"]) {
       return "누수";
     case "MOLD":
       return "곰팡이";
+    case "DAMAGE":
+      return "파손";
+    case "ELECTRIC":
+      return "전기";
+    case "GAS":
+      return "가스";
     default:
       return "기타";
   }
@@ -77,7 +87,8 @@ export default function MyPage() {
   useEffect(() => {
     reload();
   }, []);
-const sortedReports = useMemo(() => {
+
+  const sortedReports = useMemo(() => {
     return [...reports].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   }, [reports]);
 
@@ -162,7 +173,7 @@ const sortedReports = useMemo(() => {
               <View style={{ marginTop: 12, gap: 10, paddingTop: 12, borderTopWidth: 1 }}>
                 <Text style={{ fontWeight: "700" }}>거주 유형</Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {(["ONE_ROOM", "APARTMENT", "VILLA", "OFFICETEL", "OTHER"] as ResidenceType[]).map((t) => (
+                  {(["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE", "ETC"] as ResidenceType[]).map((t) => (
                     <Pressable
                       key={t}
                       onPress={() => setEditResidenceType(t)}
@@ -181,7 +192,7 @@ const sortedReports = useMemo(() => {
 
                 <Text style={{ fontWeight: "700" }}>임대 유형</Text>
                 <View style={{ flexDirection: "row", gap: 8 }}>
-                  {(["MONTHLY", "JEONSE", "SALE"] as RentType[]).map((t) => (
+                  {(["NONE", "MONTHLY", "JEONSE", "SALE"] as RentType[]).map((t) => (
                     <Pressable
                       key={t}
                       onPress={() => setEditRentType(t)}

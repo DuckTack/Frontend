@@ -1,22 +1,24 @@
 import { apiClient } from "./apiClient";
 import { getAccessToken } from "@/src/store/tokenStorage";
 
-export type ResidenceType = "ONE_ROOM" | "APARTMENT" | "VILLA" | "OFFICETEL" | "OTHER";
-export type RentType = "MONTHLY" | "JEONSE" | "SALE";
+export type ResidenceType = "ONE_ROOM" | "OFFICETEL" | "APT" | "VILLA" | "HOUSE" | "ETC";
+export type RentType = "NONE" | "MONTHLY" | "JEONSE" | "SALE";
 
 export type Me = {
   username: string;
   phoneNumber?: string;
   residenceType: ResidenceType;
   rentType: RentType;
-  address: string; // 동·호수 단위 포함
+  address: string;
 };
 
-export type UpdateMeRequest = Pick<Me, "residenceType" | "rentType" | "address">;
+export type UpdateMeRequest = Pick<Me, "residenceType" | "rentType" | "address"> & {
+  phoneNumber?: string;
+};
 
 async function isDevMode(): Promise<boolean> {
   const token = await getAccessToken();
-  return token === "DEV_TOKEN";
+  return token === "DEV_TOKEN" || token === "LOCAL_DEV_TOKEN";
 }
 
 const mockMe: Me = {
@@ -27,16 +29,31 @@ const mockMe: Me = {
   address: "서울시 어딘가 101동 1004호",
 };
 
+function normalizeMe(input: any): Me {
+  const residenceType: ResidenceType = (["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE", "ETC"] as const).includes(input?.residenceType)
+    ? input.residenceType
+    : "ONE_ROOM";
+  const rentType: RentType = (["NONE", "MONTHLY", "JEONSE", "SALE"] as const).includes(input?.rentType)
+    ? input.rentType
+    : "MONTHLY";
+
+  return {
+    username: input?.username ?? mockMe.username,
+    phoneNumber: input?.phoneNumber ?? mockMe.phoneNumber,
+    residenceType,
+    rentType,
+    address: input?.address ?? mockMe.address,
+  };
+}
+
 export async function getMe(): Promise<Me> {
-  // DEV 모드면 서버 호출 없이도 화면이 항상 동작
   if (await isDevMode()) return mockMe;
 
   try {
     const res = await apiClient.get("/api/users/me");
     const body = res.data;
-    return (body?.data ?? body) as Me;
+    return normalizeMe(body?.data ?? body);
   } catch {
-    // 백엔드가 아직 없거나 스펙이 흔들릴 때: 앱이 죽지 않도록 fallback
     return mockMe;
   }
 }
@@ -47,9 +64,14 @@ export async function updateMe(req: UpdateMeRequest): Promise<Me> {
   }
 
   try {
-    const res = await apiClient.put("/api/users/me", req);
+    const res = await apiClient.put("/api/users/me", {
+      residenceType: req.residenceType,
+      rentType: req.rentType,
+      address: req.address,
+      phoneNumber: req.phoneNumber,
+    });
     const body = res.data;
-    return (body?.data ?? body) as Me;
+    return normalizeMe(body?.data ?? body);
   } catch {
     return { ...mockMe, ...req };
   }
