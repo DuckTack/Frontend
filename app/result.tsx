@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, Image } from "react-native";
 import ScreenState from "@/src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
@@ -13,6 +13,12 @@ function issueTypeLabel(t: IssueType) {
       return "누수";
     case "MOLD":
       return "곰팡이";
+    case "DAMAGE":
+      return "파손";
+    case "ELECTRIC":
+      return "전기";
+    case "GAS":
+      return "가스";
     default:
       return "기타";
   }
@@ -29,6 +35,7 @@ export default function Result() {
 
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<HistoryDetail | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ✅ 우선순위:
   // 1) historyId가 있으면 API에서 상세 조회 (DEV면 mock 반환)
@@ -40,6 +47,9 @@ export default function Result() {
           setLoading(true);
           const d = await getHistoryDetail(params.historyId);
           setDetail(d);
+          if (d.status === "ANALYZING") {
+            pollRef.current = setTimeout(fetchDetail, 1800);
+          }
         } finally {
           setLoading(false);
         }
@@ -66,6 +76,9 @@ export default function Result() {
     }
 
     fetchDetail();
+    return () => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
   }, [params.historyId, params.issueType, params.riskScore, params.recommendation]);
 
   if (loading || !detail) {

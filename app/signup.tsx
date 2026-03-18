@@ -13,10 +13,11 @@ import {
 
 const RESIDENCE_LABELS = {
   ONE_ROOM: "원룸",
-  APARTMENT: "아파트",
+  APT: "아파트",
   VILLA: "빌라",
   OFFICETEL: "오피스텔",
-  OTHER: "기타",
+  HOUSE: "주택",
+  ETC: "기타",
 } as const;
 
 export default function Signup() {
@@ -41,7 +42,7 @@ export default function Signup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [residenceType, setResidenceType] = useState<
-    "ONE_ROOM" | "APARTMENT" | "VILLA" | "OFFICETEL" | "OTHER"
+    "ONE_ROOM" | "OFFICETEL" | "APT" | "VILLA" | "HOUSE" | "ETC"
   >("ONE_ROOM");
   const [isRenter, setIsRenter] = useState(true);
 
@@ -324,7 +325,7 @@ export default function Signup() {
 
       <Text style={{ marginTop: 8, fontWeight: "600" }}>거주 유형</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(["ONE_ROOM", "APARTMENT", "VILLA", "OFFICETEL", "OTHER"] as const).map((t) => (
+        {(["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE", "ETC"] as const).map((t) => (
           <Pressable
             key={t}
             onPress={() => setResidenceType(t)}

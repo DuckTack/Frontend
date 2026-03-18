@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { IssueType, Recommendation } from "./histories";
+import { apiClient } from "./apiClient";
+import { getHistoryDetail, listHistories, type IssueType, type Recommendation } from "./histories";
 
 /**
  리포트(PDF/증빙)
@@ -219,41 +220,61 @@ export async function getReportForHistory(historyId: string): Promise<MyReportIt
 
 
 export async function listMyReports(): Promise<MyReportItem[]> {
-  // DEV_TOKEN or 서버 미연동 상황에서도 동작하도록 로컬 seed + draft merge 구조
   try {
-    const base = (await ensureSeededMyReports()).slice();
+    const histories = await listHistories();
     const drafts = await readDraftMap();
 
-    const merged = base.map((r) => {
-      const d = drafts[r.reportId];
-      if (!d) return r;
-
-      const submitted = !!d.submittedAt;
-      const status: ReportStatus =
-        submitted ? "READY" : (d.statusOverride ?? r.status ?? "GENERATING");
+    const mapped: MyReportItem[] = histories.map((h) => {
+      const historyId = String(h.historyId ?? h.id ?? h.diagnosisId ?? "");
+      const reportId = `rep_${historyId}`;
+      const d = drafts[reportId];
+      const baseStatus: ReportStatus = h.status === "FAILED" ? "FAILED" : (h.report ? "READY" : "GENERATING");
+      const submitted = !!d?.submittedAt;
+      const status: ReportStatus = submitted ? "READY" : (d?.statusOverride ?? baseStatus);
 
       return {
-        ...r,
+        reportId,
+        historyId,
+        createdAt: h.createdAt,
+        issueType: h.issueType,
+        riskScore: h.riskScore,
+        recommendation: h.recommendation ?? (h.riskScore >= 70 ? "PRO" : "DIY"),
         status,
-        beforePhotoUri: d.beforePhotoUri ?? r.beforePhotoUri ?? null,
-        afterPhotoUri: d.afterPhotoUri ?? r.afterPhotoUri ?? null,
-        diagnosisImageUris: d.diagnosisImageUris ?? r.diagnosisImageUris ?? [],
+        beforePhotoUri: d?.beforePhotoUri ?? null,
+        afterPhotoUri: d?.afterPhotoUri ?? null,
+        diagnosisImageUris: d?.diagnosisImageUris ?? h.imageUris ?? [],
       };
     });
 
-    // 최신순
-    merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    return merged;
+    mapped.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return mapped;
   } catch {
-    // 최후 fallback
-    return mockMyReports;
+    try {
+      const base = (await ensureSeededMyReports()).slice();
+      const drafts = await readDraftMap();
+      const merged = base.map((r) => {
+        const d = drafts[r.reportId];
+        if (!d) return r;
+        const submitted = !!d.submittedAt;
+        const status: ReportStatus = submitted ? "READY" : (d.statusOverride ?? r.status ?? "GENERATING");
+        return {
+          ...r,
+          status,
+          beforePhotoUri: d.beforePhotoUri ?? r.beforePhotoUri ?? null,
+          afterPhotoUri: d.afterPhotoUri ?? r.afterPhotoUri ?? null,
+          diagnosisImageUris: d.diagnosisImageUris ?? r.diagnosisImageUris ?? [],
+        };
+      });
+      merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return merged;
+    } catch {
+      return mockMyReports;
+    }
   }
 }
 
 /**
  히스토리 목록에서 "리포트(PDF) 상태"를 바로 보여주기 위한 헬퍼.
- - key: historyId
- - value: ReportStatus (NONE/GENERATING/READY/FAILED)
  */
 export async function getReportStatusMapForHistoryIds(
   historyIds: string[]
@@ -262,66 +283,73 @@ export async function getReportStatusMapForHistoryIds(
   if (historyIds.length === 0) return map;
 
   try {
-    const base = await ensureSeededMyReports();
+    const histories = await listHistories();
     const drafts = await readDraftMap();
-
-    // historyId -> reportId
-    const reportByHistory = new Map<string, string>();
-    for (const r of base) reportByHistory.set(r.historyId, r.reportId);
-
     for (const hid of historyIds) {
-      const rid = reportByHistory.get(hid);
-      if (!rid) {
+      const h = histories.find((x) => String(x.historyId ?? x.id ?? x.diagnosisId) === hid);
+      if (!h) {
         map[hid] = "NONE";
         continue;
       }
-
-      const r = base.find((x) => x.reportId === rid);
+      const rid = `rep_${hid}`;
       const d = drafts[rid];
-
-      // Draft가 제출되었으면 READY로 간주
       const submitted = !!d?.submittedAt;
-      const status: ReportStatus =
-        submitted ? "READY" : (d?.statusOverride ?? r?.status ?? "GENERATING");
-      map[hid] = status;
+      const baseStatus: ReportStatus = h.status === "FAILED" ? "FAILED" : (h.report ? "READY" : "GENERATING");
+      map[hid] = submitted ? "READY" : (d?.statusOverride ?? baseStatus);
     }
-
     return map;
   } catch {
-    // 최후 fallback: 상태를 알 수 없으면 NONE으로
     for (const hid of historyIds) map[hid] = "NONE";
     return map;
   }
 }
 
-
-
 export async function getMyReportById(reportId: string): Promise<MyReportItem | null> {
-  const base = await ensureSeededMyReports();
-  const drafts = await readDraftMap();
-  const found = base.find((x) => x.reportId === reportId);
-  if (!found) return null;
+  const historyId = reportId.startsWith("rep_") ? reportId.replace(/^rep_/, "") : reportId;
 
-  const d = drafts[reportId];
-  if (!d) return found;
+  try {
+    const history = await getHistoryDetail(historyId);
+    const drafts = await readDraftMap();
+    const d = drafts[reportId];
+    const submitted = !!d?.submittedAt;
+    const baseStatus: ReportStatus = history.status === "FAILED" ? "FAILED" : (history.report ? "READY" : "GENERATING");
+    const status: ReportStatus = submitted ? "READY" : (d?.statusOverride ?? baseStatus);
 
-  const submitted = !!d.submittedAt;
-  const status: ReportStatus = submitted ? "READY" : (d.statusOverride ?? found.status);
-
-  return {
-    ...found,
-    status,
-    beforePhotoUri: d.beforePhotoUri ?? found.beforePhotoUri ?? null,
-    afterPhotoUri: d.afterPhotoUri ?? found.afterPhotoUri ?? null,
-    diagnosisImageUris: d.diagnosisImageUris ?? found.diagnosisImageUris ?? [],
-  };
+    return {
+      reportId,
+      historyId,
+      createdAt: history.createdAt,
+      issueType: history.issueType,
+      riskScore: history.riskScore,
+      recommendation: history.recommendation ?? (history.riskScore >= 70 ? "PRO" : "DIY"),
+      status,
+      beforePhotoUri: d?.beforePhotoUri ?? null,
+      afterPhotoUri: d?.afterPhotoUri ?? null,
+      diagnosisImageUris: d?.diagnosisImageUris ?? history.imageUris ?? [],
+    };
+  } catch {
+    const base = await ensureSeededMyReports();
+    const drafts = await readDraftMap();
+    const found = base.find((x) => x.reportId === reportId);
+    if (!found) return null;
+    const d = drafts[reportId];
+    if (!d) return found;
+    const submitted = !!d.submittedAt;
+    const status: ReportStatus = submitted ? "READY" : (d.statusOverride ?? found.status);
+    return {
+      ...found,
+      status,
+      beforePhotoUri: d.beforePhotoUri ?? found.beforePhotoUri ?? null,
+      afterPhotoUri: d.afterPhotoUri ?? found.afterPhotoUri ?? null,
+      diagnosisImageUris: d.diagnosisImageUris ?? found.diagnosisImageUris ?? [],
+    };
+  }
 }
 
-export async function downloadReport(_reportId: string): Promise<void> {
-  // Backend2에서 presigned URL 등 내려주면 구현
-  throw new Error("준비중");
+export async function downloadReport(reportId: string): Promise<void> {
+  const historyId = reportId.startsWith("rep_") ? reportId.replace(/^rep_/, "") : reportId;
+  const history = await getHistoryDetail(historyId);
+  const diagnosisId = String(history.diagnosisId ?? historyId);
+  await apiClient.get(`/api/reports/diagnosis/${diagnosisId}/download`, { responseType: "arraybuffer" });
 }
 
-export async function createShareLink(_reportId: string): Promise<string> {
-  throw new Error("준비중");
-}

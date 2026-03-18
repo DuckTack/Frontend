@@ -20,6 +20,12 @@ function issueLabel(t: IssueType) {
       return "누수";
     case "MOLD":
       return "곰팡이";
+    case "DAMAGE":
+      return "파손";
+    case "ELECTRIC":
+      return "전기";
+    case "GAS":
+      return "가스";
     default:
       return "기타";
   }
