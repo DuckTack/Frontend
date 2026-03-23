@@ -9,23 +9,33 @@ import {
   sendEmailVerificationCode,
   signup,
   verifyEmailCode,
+  type ResidenceType,
+  type RentType,
 } from "@/src/api/auth";
 
-const RESIDENCE_LABELS = {
+const RESIDENCE_LABELS: Record<ResidenceType, string> = {
   ONE_ROOM: "원룸",
+  OFFICETEL: "오피스텔",
   APT: "아파트",
   VILLA: "빌라",
-  OFFICETEL: "오피스텔",
   HOUSE: "주택",
   ETC: "기타",
-} as const;
+};
+
+const RENT_LABELS: Record<RentType, string> = {
+  NONE: "미정",
+  MONTHLY: "월세",
+  JEONSE: "전세",
+  SALE: "매매",
+};
 
 export default function Signup() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [address, setAddress] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
 
   const [usernameChecked, setUsernameChecked] = useState<boolean | null>(null);
@@ -41,10 +51,8 @@ export default function Signup() {
   const [verifyingEmailCode, setVerifyingEmailCode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [residenceType, setResidenceType] = useState<
-    "ONE_ROOM" | "OFFICETEL" | "APT" | "VILLA" | "HOUSE" | "ETC"
-  >("ONE_ROOM");
-  const [isRenter, setIsRenter] = useState(true);
+  const [residenceType, setResidenceType] = useState<ResidenceType>("ONE_ROOM");
+  const [rentType, setRentType] = useState<RentType>("NONE");
 
   const normalizedPhone = useMemo(() => phoneNumber.replace(/[^0-9]/g, ""), [phoneNumber]);
 
@@ -60,7 +68,7 @@ export default function Signup() {
       setUsernameChecked(ok);
       Alert.alert("아이디 확인", ok ? "사용 가능한 아이디입니다." : "이미 사용 중인 아이디입니다.");
     } catch {
-      Alert.alert("확인 실패", "잠시 후 다시 시도해주세요.");
+      Alert.alert("확인 실패", "아이디 중복검사 API를 확인해주세요.");
     } finally {
       setCheckingUsername(false);
     }
@@ -77,7 +85,7 @@ export default function Signup() {
       setPhoneChecked(ok);
       Alert.alert("휴대폰 번호 확인", ok ? "사용 가능한 휴대폰 번호입니다." : "이미 사용 중인 휴대폰 번호입니다.");
     } catch {
-      Alert.alert("확인 실패", "잠시 후 다시 시도해주세요.");
+      Alert.alert("확인 실패", "휴대폰 번호 중복검사 API를 확인해주세요.");
     } finally {
       setCheckingPhone(false);
     }
@@ -97,7 +105,7 @@ export default function Signup() {
       setEmailVerified(false);
       Alert.alert("이메일 확인", ok ? "사용 가능한 이메일입니다." : "이미 사용 중인 이메일입니다.");
     } catch {
-      Alert.alert("확인 실패", "잠시 후 다시 시도해주세요.");
+      Alert.alert("확인 실패", "이메일 중복검사 API를 확인해주세요.");
     } finally {
       setCheckingEmail(false);
     }
@@ -115,16 +123,12 @@ export default function Signup() {
     }
     try {
       setSendingEmailCode(true);
-      const result = await sendEmailVerificationCode(trimmed);
+      await sendEmailVerificationCode(trimmed);
       setEmailCodeSent(true);
       setEmailVerified(false);
-      if (result.devCode) {
-        Alert.alert("인증코드 발송", `개발용 인증코드: ${result.devCode}`);
-      } else {
-        Alert.alert("인증코드 발송", "인증코드를 이메일로 보냈습니다.");
-      }
+      Alert.alert("인증코드 발송", "인증코드를 이메일로 보냈습니다.");
     } catch {
-      Alert.alert("발송 실패", "잠시 후 다시 시도해주세요.");
+      Alert.alert("발송 실패", "이메일 인증 API를 확인해주세요.");
     } finally {
       setSendingEmailCode(false);
     }
@@ -145,7 +149,7 @@ export default function Signup() {
       setEmailVerified(ok);
       Alert.alert("이메일 인증", ok ? "이메일 인증이 완료되었습니다." : "인증코드를 다시 확인해주세요.");
     } catch {
-      Alert.alert("인증 실패", "잠시 후 다시 시도해주세요.");
+      Alert.alert("인증 실패", "이메일 인증 확인 API를 확인해주세요.");
     } finally {
       setVerifyingEmailCode(false);
     }
@@ -160,6 +164,10 @@ export default function Signup() {
       Alert.alert("입력 필요", "이메일을 입력해주세요.");
       return;
     }
+    if (!normalizedPhone) {
+      Alert.alert("입력 필요", "휴대폰 번호를 입력해주세요.");
+      return;
+    }
     if (passwordConfirm.length === 0) {
       Alert.alert("입력 필요", "비밀번호 재확인을 입력해주세요.");
       return;
@@ -172,8 +180,8 @@ export default function Signup() {
       Alert.alert("아이디 확인", "아이디 중복검사를 완료해주세요.");
       return;
     }
-    if (normalizedPhone && phoneChecked !== true) {
-      Alert.alert("휴대폰 번호 확인", "휴대폰 번호를 입력했다면 중복검사를 완료해주세요.");
+    if (phoneChecked !== true) {
+      Alert.alert("휴대폰 번호 확인", "휴대폰 번호 중복검사를 완료해주세요.");
       return;
     }
     if (emailChecked !== true) {
@@ -189,27 +197,28 @@ export default function Signup() {
       setIsSubmitting(true);
       await signup({
         username: username.trim(),
-        password,
         email: email.trim().toLowerCase(),
-        phoneNumber: normalizedPhone || undefined,
+        password,
+        phoneNumber: normalizedPhone,
         residenceType,
-        isRenter,
+        rentType,
+        address,
         emailVerified: true,
       });
       Alert.alert("회원가입 성공", "회원가입이 완료되었습니다. 로그인해주세요.");
       router.replace("/login");
     } catch (e: any) {
-      const message = String(e?.message ?? "");
-      if (message === "USERNAME_TAKEN") {
+      const message = String(e?.response?.data?.code ?? e?.message ?? "");
+      if (message.includes("USERNAME_DUPLICATE") || message === "USERNAME_TAKEN") {
         Alert.alert("회원가입 실패", "이미 사용 중인 아이디입니다.");
-      } else if (message === "PHONE_TAKEN") {
+      } else if (message.includes("PHONE_DUPLICATE") || message === "PHONE_TAKEN") {
         Alert.alert("회원가입 실패", "이미 사용 중인 휴대폰 번호입니다.");
-      } else if (message === "EMAIL_TAKEN") {
+      } else if (message.includes("EMAIL_DUPLICATE") || message === "EMAIL_TAKEN") {
         Alert.alert("회원가입 실패", "이미 사용 중인 이메일입니다.");
-      } else if (message === "EMAIL_NOT_VERIFIED") {
+      } else if (message.includes("EMAIL_VERIFICATION") || message === "EMAIL_NOT_VERIFIED") {
         Alert.alert("회원가입 실패", "이메일 인증을 먼저 완료해주세요.");
       } else {
-        Alert.alert("회원가입 실패", "입력한 정보 또는 서버 상태를 확인해주세요.");
+        Alert.alert("회원가입 실패", "입력값 또는 서버 응답을 확인해주세요.");
       }
     } finally {
       setIsSubmitting(false);
@@ -230,11 +239,7 @@ export default function Signup() {
         autoCapitalize="none"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable
-        onPress={handleCheckUsername}
-        disabled={checkingUsername}
-        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingUsername ? 0.6 : 1 }}
-      >
+      <Pressable onPress={handleCheckUsername} disabled={checkingUsername} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingUsername ? 0.6 : 1 }}>
         <Text>{checkingUsername ? "확인 중..." : "아이디 중복검사"}</Text>
       </Pressable>
 
@@ -244,15 +249,11 @@ export default function Signup() {
           setPhoneNumber(t);
           setPhoneChecked(null);
         }}
-        placeholder="휴대폰 번호(선택) 예) 01012345678"
+        placeholder="휴대폰 번호 예) 01012345678"
         keyboardType="phone-pad"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable
-        onPress={handleCheckPhone}
-        disabled={checkingPhone || !normalizedPhone}
-        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingPhone || !normalizedPhone ? 0.6 : 1 }}
-      >
+      <Pressable onPress={handleCheckPhone} disabled={checkingPhone || !normalizedPhone} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingPhone || !normalizedPhone ? 0.6 : 1 }}>
         <Text>{checkingPhone ? "확인 중..." : "휴대폰 번호 중복검사"}</Text>
       </Pressable>
 
@@ -269,19 +270,11 @@ export default function Signup() {
         keyboardType="email-address"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable
-        onPress={handleCheckEmail}
-        disabled={checkingEmail}
-        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingEmail ? 0.6 : 1 }}
-      >
+      <Pressable onPress={handleCheckEmail} disabled={checkingEmail} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingEmail ? 0.6 : 1 }}>
         <Text>{checkingEmail ? "확인 중..." : "이메일 중복검사"}</Text>
       </Pressable>
 
-      <Pressable
-        onPress={handleSendEmailCode}
-        disabled={sendingEmailCode || emailChecked !== true}
-        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: sendingEmailCode || emailChecked !== true ? 0.6 : 1 }}
-      >
+      <Pressable onPress={handleSendEmailCode} disabled={sendingEmailCode || emailChecked !== true} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: sendingEmailCode || emailChecked !== true ? 0.6 : 1 }}>
         <Text>{sendingEmailCode ? "발송 중..." : "이메일 인증코드 발송"}</Text>
       </Pressable>
 
@@ -292,30 +285,14 @@ export default function Signup() {
         keyboardType="number-pad"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable
-        onPress={handleVerifyEmail}
-        disabled={verifyingEmailCode || !emailCodeSent}
-        style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: verifyingEmailCode || !emailCodeSent ? 0.6 : 1 }}
-      >
+      <Pressable onPress={handleVerifyEmail} disabled={verifyingEmailCode || !emailCodeSent} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: verifyingEmailCode || !emailCodeSent ? 0.6 : 1 }}>
         <Text>{verifyingEmailCode ? "확인 중..." : "이메일 인증 확인"}</Text>
       </Pressable>
 
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        placeholder="비밀번호"
-        secureTextEntry
-        style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
-      />
+      <TextInput value={password} onChangeText={setPassword} placeholder="비밀번호" secureTextEntry style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
 
       <View style={{ gap: 6 }}>
-        <TextInput
-          value={passwordConfirm}
-          onChangeText={setPasswordConfirm}
-          placeholder="비밀번호 재확인"
-          secureTextEntry
-          style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
-        />
+        <TextInput value={passwordConfirm} onChangeText={setPasswordConfirm} placeholder="비밀번호 재확인" secureTextEntry style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
         {passwordConfirm.length > 0 && (
           <Text style={{ fontSize: 12, opacity: 0.9 }}>
             {password === passwordConfirm ? "✅ 비밀번호가 일치합니다." : "❌ 비밀번호가 일치하지 않습니다."}
@@ -342,28 +319,28 @@ export default function Signup() {
         ))}
       </View>
 
-      <Text style={{ marginTop: 8, fontWeight: "600" }}>임대 여부</Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <Pressable onPress={() => setIsRenter(true)} style={{ padding: 10, borderWidth: 1, borderRadius: 10, opacity: isRenter ? 1 : 0.5 }}>
-          <Text>임대</Text>
-        </Pressable>
-        <Pressable onPress={() => setIsRenter(false)} style={{ padding: 10, borderWidth: 1, borderRadius: 10, opacity: !isRenter ? 1 : 0.5 }}>
-          <Text>자가</Text>
-        </Pressable>
+      <Text style={{ marginTop: 8, fontWeight: "600" }}>임대 형태</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {(["NONE", "MONTHLY", "JEONSE", "SALE"] as const).map((t) => (
+          <Pressable
+            key={t}
+            onPress={() => setRentType(t)}
+            style={{
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderWidth: 1,
+              borderRadius: 10,
+              opacity: rentType === t ? 1 : 0.55,
+            }}
+          >
+            <Text>{RENT_LABELS[t]}</Text>
+          </Pressable>
+        ))}
       </View>
 
-      <Pressable
-        onPress={handleSignup}
-        disabled={isSubmitting}
-        style={{
-          marginTop: 16,
-          paddingVertical: 12,
-          borderRadius: 10,
-          borderWidth: 1,
-          alignItems: "center",
-          opacity: isSubmitting ? 0.6 : 1,
-        }}
-      >
+      <TextInput value={address} onChangeText={setAddress} placeholder="주소 (선택)" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+
+      <Pressable onPress={handleSignup} disabled={isSubmitting} style={{ marginTop: 16, paddingVertical: 12, borderRadius: 10, borderWidth: 1, alignItems: "center", opacity: isSubmitting ? 0.6 : 1 }}>
         <Text>{isSubmitting ? "회원가입 중..." : "회원가입"}</Text>
       </Pressable>
 
