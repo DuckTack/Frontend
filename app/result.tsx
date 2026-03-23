@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Image } from "react-native";
+import { useEffect, useState } from "react";
+import { View, Text, Pressable } from "react-native";
 import ScreenState from "@/src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { getHistoryDetail, IssueType, Recommendation, HistoryDetail } from "@/src/api/histories";
+import { getHistoryDetail, IssueType, HistoryDetail } from "@/src/api/histories";
 
 function issueTypeLabel(t: IssueType) {
   switch (t) {
@@ -25,64 +25,56 @@ function issueTypeLabel(t: IssueType) {
 }
 
 export default function Result() {
-  const params = useLocalSearchParams<{
-    historyId?: string;
-    mock?: string;
-    issueType?: string;
-    riskScore?: string;
-    recommendation?: string;
-  }>();
-
+  const params = useLocalSearchParams<{ historyId?: string }>();
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<HistoryDetail | null>(null);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ✅ 우선순위:
-  // 1) historyId가 있으면 API에서 상세 조회 (DEV면 mock 반환)
-  // 2) 없으면 기존 방식(파라미터로 넘겨받은 mock 값) 사용
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
     async function fetchDetail() {
-      if (params.historyId) {
-        try {
-          setLoading(true);
-          const d = await getHistoryDetail(params.historyId);
-          setDetail(d);
-          if (d.status === "ANALYZING") {
-            pollRef.current = setTimeout(fetchDetail, 1800);
-          }
-        } finally {
-          setLoading(false);
-        }
+      if (!params.historyId) {
+        setLoading(false);
         return;
       }
 
-      // fallback: 기존 mock params
-      const issueType: IssueType = (params.issueType as IssueType) || "MOLD";
-      const riskScore = Number(params.riskScore ?? "78");
-      const recommendation: Recommendation = (params.recommendation as Recommendation) || "DIY";
+      try {
+        const d = await getHistoryDetail(params.historyId);
+        if (cancelled) return;
+        setDetail(d);
+        setLoading(false);
 
-      setDetail({
-        id: "mock",
-        status: "COMPLETED",
-        createdAt: new Date().toISOString().slice(0, 10),
-        issueType,
-        riskScore,
-        recommendation,
-        cause: "환기 부족으로 인한 곰팡이 가능성이 높아요.",
-        naturalOrHuman: "자연(환경) 요인 가능성 ↑",
-        caution: "호흡기 민감하면 마스크 착용 권장. 표면만 닦고 끝내지 말고 원인 제거가 중요해요.",
-      });
-      setLoading(false);
+        if (d.status === "ANALYZING") {
+          timer = setTimeout(fetchDetail, 2000);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
     }
 
+    setLoading(true);
     fetchDetail();
     return () => {
-      if (pollRef.current) clearTimeout(pollRef.current);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [params.historyId, params.issueType, params.riskScore, params.recommendation]);
+  }, [params.historyId]);
 
-  if (loading || !detail) {
+  if (loading) {
     return <ScreenState loading />;
+  }
+
+  if (!detail) {
+    return <ScreenState title="결과를 불러오지 못했어요" errorMessage="historyId 또는 서버 응답을 확인해주세요." />;
+  }
+
+  if (detail.status === "ANALYZING") {
+    return <ScreenState title="분석 진행 중" errorMessage="백엔드 분석이 끝나면 이 화면이 자동으로 갱신됩니다." />;
+  }
+
+  if (detail.status === "FAILED") {
+    return <ScreenState title="분석 실패" errorMessage="백엔드 로그를 확인해주세요." />;
   }
 
   const riskColor = detail.riskScore >= 70 ? "#ef4444" : detail.riskScore >= 40 ? "#f59e0b" : "#22c55e";
@@ -99,41 +91,20 @@ export default function Result() {
           <Text>위험도: {detail.riskScore}% ({riskLabel})</Text>
         </View>
         <Text>추천: {detail.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>
+        <Text>진단 ID: {detail.diagnosisId ?? "-"}</Text>
       </View>
 
-      {detail.imageUris && detail.imageUris.length > 0 && (
-        <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, gap: 8 }}>
-          <Text style={{ fontWeight: "800" }}>진단에 사용한 사진</Text>
-          <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
-            {detail.imageUris.slice(0, 6).map((uri, idx) => (
-              <Image
-                key={`${uri}_${idx}`}
-                source={{ uri }}
-                style={{ width: 72, height: 72, borderRadius: 10, borderWidth: 1 }}
-              />
-            ))}
-          </View>
-          {detail.imageUris.length > 6 && <Text style={{ opacity: 0.7 }}>+ {detail.imageUris.length - 6}장 더 있음</Text>}
-        </View>
-      )}
-
       <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, gap: 8 }}>
-        <Text style={{ fontWeight: "800" }}>원인(추정)</Text>
-        <Text style={{ opacity: 0.8 }}>{detail.cause ?? "준비중"}</Text>
-
-        <Text style={{ fontWeight: "800", marginTop: 6 }}>자연/인위 요인</Text>
-        <Text style={{ opacity: 0.8 }}>{detail.naturalOrHuman ?? "준비중"}</Text>
-
-        <Text style={{ fontWeight: "800", marginTop: 6 }}>주의사항</Text>
-        <Text style={{ opacity: 0.8 }}>{detail.caution ?? "준비중"}</Text>
+        <Text style={{ fontWeight: "800" }}>상세 정보</Text>
+        <Text style={{ opacity: 0.8 }}>현재 백엔드 history detail 응답에는 원인/주의사항/이미지 URL이 포함되지 않아 기본 결과만 표시합니다.</Text>
       </View>
 
       <Pressable
         onPress={() =>
           router.push(
             detail.recommendation === "DIY"
-              ? { pathname: "/diy", params: { historyId: detail.id } }
-              : { pathname: "/expert", params: { historyId: detail.id } }
+              ? { pathname: "/diy", params: { historyId: String(detail.id) } }
+              : { pathname: "/expert", params: { historyId: String(detail.id) } }
           )
         }
         style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 12, alignItems: "center" }}

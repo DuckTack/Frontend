@@ -3,9 +3,7 @@ import { View, Text, Pressable, Alert, TextInput } from "react-native";
 import { router, Stack } from "expo-router";
 
 import { login } from "@/src/api/auth";
-import { saveAccessToken } from "@/src/store/tokenStorage";
-// 개발용 슈퍼 계정 불러오기
-import { saveDevToken } from "@/src/store/tokenStorage";
+import { saveAccessToken, saveDevToken } from "@/src/store/tokenStorage";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -20,16 +18,19 @@ export default function Login() {
 
     try {
       setIsSubmitting(true);
-
       const data = await login({ username, password });
       await saveAccessToken(data.accessToken);
-
       router.replace("/(tabs)?intro=1");
-    } catch (e: any) {
+    } catch {
       Alert.alert("로그인 실패", "아이디/비밀번호 또는 서버 상태를 확인해주세요.");
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleDevLogin() {
+    await saveDevToken();
+    router.replace("/(tabs)?intro=1");
   }
 
   return (
@@ -67,10 +68,7 @@ export default function Login() {
       </Pressable>
 
       <Pressable
-        onPress={async () => {
-          await saveDevToken();
-          router.replace("/(tabs)?intro=1");
-        }}
+        onPress={handleDevLogin}
         style={{
           paddingVertical: 12,
           borderRadius: 10,
@@ -81,10 +79,7 @@ export default function Login() {
         <Text>DEV 슈퍼계정으로 로그인</Text>
       </Pressable>
 
-      <Pressable
-        onPress={() => router.push("/signup")}
-        style={{ paddingVertical: 10, alignItems: "center" }}
-      >
+      <Pressable onPress={() => router.push("/signup")} style={{ paddingVertical: 10, alignItems: "center" }}>
         <Text style={{ textDecorationLine: "underline" }}>회원가입</Text>
       </Pressable>
 

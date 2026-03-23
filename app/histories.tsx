@@ -82,7 +82,7 @@ export default function Histories() {
 
   function openDetail(item: HistorySummary) {
     // ✅ 앞으로는 params로 값 전체를 넘기지 않고 id만 넘깁니다.
-    // Result 화면에서 GET /api/histories/{id} 로 상세 조회하는 구조(DEV면 mock 반환).
+    // Result 화면에서 GET /api/histories/{id} 로 상세 조회하는 구조입니다.
     router.push({
       pathname: "/result",
       params: { historyId: getHistoryId(item) },
