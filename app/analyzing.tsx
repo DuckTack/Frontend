@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { View, Text, Alert } from "react-native";
+import { View, Text } from "react-native";
 import { router } from "expo-router";
 
 import { startDiagnosis } from "@/src/api/diagnosis";
+import { showAlert } from "@/src/utils/showAlert";
 
 const STEPS = ["분석 중...", "판단 중...", "평가 중..."];
 
@@ -15,18 +16,24 @@ export default function Analyzing() {
     const t1 = setTimeout(() => alive && setStepIndex(1), 700);
     const t2 = setTimeout(() => alive && setStepIndex(2), 1400);
 
-    // 이제 mock 이동도 API 레이어에서 관리
-    // Backend1 오면 startDiagnosis() 내부만 실제 호출로 교체하면 됨
     const t3 = setTimeout(async () => {
       try {
         const { historyId } = await startDiagnosis();
-        // 업로드 플로우는 결과까지 보고 나면, iOS 제스처로 자연스럽게 이전 화면(업로드)로 돌아가도록 둡니다.
         router.replace({ pathname: "/result", params: { historyId } });
-      } catch {
-        Alert.alert("분석 실패", "다시 시도해주세요.");
-        router.back();
+      } catch (e: any) {
+        console.error("[analyzing] startDiagnosis failed", e?.response?.status, e?.response?.data ?? e);
+        const status = e?.response?.status;
+        const code = String(e?.response?.data?.code ?? e?.response?.data?.message ?? e?.message ?? "");
+        if (status === 401 || status === 403 || code.includes("AUTH") || code.includes("ACCESS_DENIED")) {
+          showAlert("분석 실패", "로그인 토큰 또는 권한 문제입니다. 다시 로그인 후 시도해주세요.");
+        } else if (code.includes("NO_PENDING_IMAGES")) {
+          showAlert("분석 실패", "분석할 사진이 없습니다. 다시 선택해주세요.");
+        } else {
+          showAlert("분석 실패", "사진 업로드/분석 API 응답을 확인해주세요.");
+        }
+        router.replace("/upload");
       }
-    }, 2200);
+    }, 1200);
 
     return () => {
       alive = false;
