@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
+import { showAlert } from "@/src/utils/showAlert";
 
 import ScreenState from "@/src/components/ScreenState";
 import { clearAccessToken } from "@/src/store/tokenStorage";
@@ -61,7 +62,7 @@ export default function MyPage() {
       setEditPhoneNumber(meData.phoneNumber ?? "");
       setEditAddress(meData.address ?? "");
     } catch {
-      Alert.alert("불러오기 실패", "로그인 상태/서버 상태를 확인해주세요.");
+      showAlert("불러오기 실패", "로그인 상태/서버 상태를 확인해주세요.");
     } finally {
       setLoading(false);
     }
@@ -83,28 +84,28 @@ export default function MyPage() {
       });
       setMe(updated);
       setEditOpen(false);
-      Alert.alert("저장 완료", "내 정보가 수정되었습니다.");
+      showAlert("저장 완료", "내 정보가 수정되었습니다.");
     } catch {
-      Alert.alert("저장 실패", "프로필 수정 API와 enum 값을 확인해주세요.");
+      showAlert("저장 실패", "프로필 수정 API와 enum 값을 확인해주세요.");
     }
   }
 
   async function handleGenerate(report: MyReportItem) {
     try {
       await generateReport(report.diagnosisId);
-      Alert.alert("생성 요청 완료", "백엔드에서 PDF 생성 요청을 받았습니다. 새로고침 후 상태를 확인해주세요.");
+      showAlert("생성 요청 완료", "백엔드에서 PDF 생성 요청을 받았습니다. 새로고침 후 상태를 확인해주세요.");
       await reload();
     } catch {
-      Alert.alert("생성 실패", "리포트 생성 API를 확인해주세요.");
+      showAlert("생성 실패", "리포트 생성 API를 확인해주세요.");
     }
   }
 
   async function handleDownload(report: MyReportItem) {
     try {
       const bytes = await downloadReport(report.diagnosisId);
-      Alert.alert("다운로드 API 확인", `PDF 응답 수신 완료 (${bytes} bytes)`);
+      showAlert("다운로드 API 확인", `PDF 응답 수신 완료 (${bytes} bytes)`);
     } catch {
-      Alert.alert("다운로드 실패", "PDF 다운로드 API를 확인해주세요.");
+      showAlert("다운로드 실패", "PDF 다운로드 API를 확인해주세요.");
     }
   }
 
@@ -185,7 +186,7 @@ export default function MyPage() {
           sortedReports.map((r) => {
             const isReady = r.status === "READY";
             return (
-              <Pressable key={r.reportId} onPress={() => router.push(`/report/${r.reportId}`)} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
+              <Pressable key={r.reportId} onPress={() => router.push({ pathname: "/report/[reportId]" as never, params: { reportId: String(r.reportId) } as never })} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
                 <Text style={{ fontWeight: "700" }}>{new Date(r.createdAt).toISOString().slice(0, 10)} · {issueLabel(r.issueType)}</Text>
                 <Text>위험도: {r.riskScore}%</Text>
                 <Text>추천: {r.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>

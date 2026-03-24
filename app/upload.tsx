@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { View, Text, Pressable, Image, ScrollView, Alert } from "react-native";
+import { View, Text, Pressable, Image, ScrollView } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { setPendingImages } from "@/src/api/diagnosis";
+import { showAlert } from "@/src/utils/showAlert";
 
 type PickedImage = {
   uri: string;
@@ -20,13 +21,13 @@ export default function Upload() {
   async function pickFromLibrary() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("권한 필요", "사진 접근 권한을 허용해주세요.");
+      showAlert("권한 필요", "사진 접근 권한을 허용해주세요.");
       return;
     }
 
     const remaining = MAX_IMAGES - images.length;
     if (remaining <= 0) {
-      Alert.alert("제한 초과", `사진은 최대 ${MAX_IMAGES}장까지 선택할 수 있습니다.`);
+      showAlert("제한 초과", `사진은 최대 ${MAX_IMAGES}장까지 선택할 수 있습니다.`);
       return;
     }
 
@@ -50,12 +51,12 @@ export default function Upload() {
   async function takePhoto() {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("권한 필요", "카메라 권한을 허용해주세요.");
+      showAlert("권한 필요", "카메라 권한을 허용해주세요.");
       return;
     }
 
     if (images.length >= MAX_IMAGES) {
-      Alert.alert("제한 초과", `사진은 최대 ${MAX_IMAGES}장까지 선택할 수 있습니다.`);
+      showAlert("제한 초과", `사진은 최대 ${MAX_IMAGES}장까지 선택할 수 있습니다.`);
       return;
     }
 
@@ -73,7 +74,7 @@ export default function Upload() {
 
   function goAnalyze() {
     if (images.length === 0) {
-      Alert.alert("사진 필요", "진단할 사진을 최소 1장 선택해주세요.");
+      showAlert("사진 필요", "진단할 사진을 최소 1장 선택해주세요.");
       return;
     }
 

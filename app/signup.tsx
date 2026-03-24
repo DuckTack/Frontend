@@ -239,7 +239,7 @@ export default function Signup() {
         autoCapitalize="none"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable onPress={handleCheckUsername} disabled={checkingUsername} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingUsername ? 0.6 : 1 }}>
+      <Pressable onPress={handleCheckUsername} disabled={checkingUsername || !username.trim()} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingUsername || !username.trim() ? 0.6 : 1 }}>
         <Text>{checkingUsername ? "확인 중..." : "아이디 중복검사"}</Text>
       </Pressable>
 
@@ -270,7 +270,7 @@ export default function Signup() {
         keyboardType="email-address"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable onPress={handleCheckEmail} disabled={checkingEmail} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingEmail ? 0.6 : 1 }}>
+      <Pressable onPress={handleCheckEmail} disabled={checkingEmail || !email.trim()} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: checkingEmail || !email.trim() ? 0.6 : 1 }}>
         <Text>{checkingEmail ? "확인 중..." : "이메일 중복검사"}</Text>
       </Pressable>
 
