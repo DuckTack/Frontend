@@ -1,71 +1,64 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { apiClient } from "./apiClient";
-import { getHistoryDetail, listHistories, type HistoryDetail, type IssueType, type Recommendation } from "./histories";
+
+const FS: any = FileSystem;
 
 export type ReportStatus = "NONE" | "GENERATING" | "READY" | "FAILED";
 
-export type MyReportItem = {
-  reportId: string;
-  historyId: string;
-  diagnosisId: string;
-  createdAt: string;
-  issueType: IssueType;
+export interface MyReportItem {
+  id: number;
+  diagnosisId: number;
+  issueType: string;
   riskScore: number;
-  recommendation: Recommendation;
   status: ReportStatus;
+  createdAt: string;
+}
+
+/** 페이지 응답 타입 */
+export type PageResponse<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
 };
 
-function statusFromHistory(history: HistoryDetail): ReportStatus {
-  if (history.status === "FAILED") return "FAILED";
-  if (history.report) return "READY";
-  return "GENERATING";
+/** 내 리포트 목록 */
+export async function listMyReports(): Promise<PageResponse<MyReportItem>> {
+  const res = await apiClient.get(
+      "/api/histories?page=0&size=20&sort=createdAt,desc"
+  );
+  return res.data.data;
 }
 
-function toReportItem(history: HistoryDetail): MyReportItem {
-  return {
-    reportId: String(history.id),
-    historyId: String(history.id),
-    diagnosisId: String(history.diagnosisId ?? ""),
-    createdAt: history.createdAt,
-    issueType: history.issueType,
-    riskScore: history.riskScore,
-    recommendation: history.recommendation,
-    status: statusFromHistory(history),
-  };
-}
-
-export async function listMyReports(): Promise<MyReportItem[]> {
-  const histories = await listHistories();
-  const completed = histories.filter((item) => item.status !== "ANALYZING" || item.diagnosisId);
-  const details = await Promise.all(completed.map((item) => getHistoryDetail(item.id)));
-  return details
-    .filter((detail) => Boolean(detail.diagnosisId))
-    .map(toReportItem)
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-}
-
-export async function getReportStatusMapForHistoryIds(historyIds: string[]): Promise<Record<string, ReportStatus>> {
-  const details = await Promise.all(historyIds.map((id) => getHistoryDetail(id)));
-  return details.reduce<Record<string, ReportStatus>>((acc, detail) => {
-    acc[String(detail.id)] = statusFromHistory(detail);
-    return acc;
-  }, {});
-}
-
-export async function getMyReportById(reportId: string): Promise<MyReportItem | null> {
-  const detail = await getHistoryDetail(reportId);
-  if (!detail?.diagnosisId) return null;
-  return toReportItem(detail);
-}
-
-export async function generateReport(diagnosisId: string | number): Promise<void> {
+/** PDF 생성 */
+export async function generateReport(diagnosisId: number) {
   await apiClient.post(`/api/reports/diagnosis/${diagnosisId}/generate`);
 }
 
-export async function downloadReport(diagnosisId: string | number): Promise<number> {
-  const res = await apiClient.get(`/api/reports/diagnosis/${diagnosisId}/download`, {
-    responseType: "arraybuffer",
-    timeout: 30000,
-  });
-  const bytes = res.data?.byteLength ?? res.data?.length ?? 0;
-  return Number(bytes);
+/** PDF URL 가져오기 */
+export async function getPdfUrl(diagnosisId: number): Promise<string> {
+  const res = await apiClient.get(
+      `/api/reports/diagnosis/${diagnosisId}/pdf-url`
+  );
+  return res.data.data;
+}
+
+/** PDF 다운로드 */
+export async function downloadReport(
+    diagnosisId: number
+): Promise<string> {
+  const url = await getPdfUrl(diagnosisId);
+
+  const fileUri = FS.documentDirectory + `report_${diagnosisId}.pdf`;
+
+  await FS.downloadAsync(url, fileUri);
+
+  return fileUri;
+}
+
+/** 리포트 존재 여부 */
+export async function getReportStatusMap(): Promise<Record<string, boolean>> {
+  const res = await apiClient.get("/api/reports/status-map");
+  return res.data.data;
 }

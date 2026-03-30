@@ -11,7 +11,7 @@ import {
   verifyEmailCode,
   type ResidenceType,
   type RentType,
-} from "@/src/api/auth";
+} from "../src/api/auth";
 
 const RESIDENCE_LABELS: Record<ResidenceType, string> = {
   ONE_ROOM: "원룸",

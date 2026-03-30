@@ -1,210 +1,112 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
-import { showAlert } from "@/src/utils/showAlert";
-
-import ScreenState from "@/src/components/ScreenState";
-import { clearAccessToken } from "@/src/store/tokenStorage";
-import { downloadReport, generateReport, listMyReports, MyReportItem } from "@/src/api/reports";
-import { getMe, updateMe, Me, ResidenceType, RentType } from "@/src/api/users";
-
-function residenceLabel(t: ResidenceType) {
-  switch (t) {
-    case "ONE_ROOM": return "원룸";
-    case "OFFICETEL": return "오피스텔";
-    case "APT": return "아파트";
-    case "VILLA": return "빌라";
-    case "HOUSE": return "주택";
-    default: return "기타";
-  }
-}
-
-function rentLabel(t: RentType) {
-  switch (t) {
-    case "NONE": return "미정";
-    case "MONTHLY": return "월세";
-    case "JEONSE": return "전세";
-    default: return "매매";
-  }
-}
-
-function issueLabel(t: MyReportItem["issueType"]) {
-  switch (t) {
-    case "CRACK": return "균열";
-    case "LEAK": return "누수";
-    case "MOLD": return "곰팡이";
-    case "DAMAGE": return "파손";
-    case "ELECTRIC": return "전기";
-    case "GAS": return "가스";
-    default: return "기타";
-  }
-}
+import { useEffect, useState } from "react";
+import { View, Text, Pressable, ScrollView, Alert } from "react-native";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
+import {
+  listMyReports,
+  generateReport,
+  getPdfUrl,
+  MyReportItem,
+} from "../src/api/reports";
 
 export default function MyPage() {
-  const [loading, setLoading] = useState(true);
-  const [me, setMe] = useState<Me | null>(null);
   const [reports, setReports] = useState<MyReportItem[]>([]);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [editResidenceType, setEditResidenceType] = useState<ResidenceType>("ONE_ROOM");
-  const [editRentType, setEditRentType] = useState<RentType>("NONE");
-  const [editPhoneNumber, setEditPhoneNumber] = useState("");
-  const [editAddress, setEditAddress] = useState("");
-
-  async function reload() {
-    try {
-      setLoading(true);
-      const [meData, reportData] = await Promise.all([getMe(), listMyReports()]);
-      setMe(meData);
-      setReports(reportData);
-      setEditResidenceType(meData.residenceType);
-      setEditRentType(meData.rentType);
-      setEditPhoneNumber(meData.phoneNumber ?? "");
-      setEditAddress(meData.address ?? "");
-    } catch {
-      showAlert("불러오기 실패", "로그인 상태/서버 상태를 확인해주세요.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    reload();
+    loadReports();
   }, []);
 
-  const sortedReports = useMemo(() => [...reports].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)), [reports]);
-
-  async function handleSaveProfile() {
+  async function loadReports() {
     try {
-      const updated = await updateMe({
-        residenceType: editResidenceType,
-        rentType: editRentType,
-        phoneNumber: editPhoneNumber,
-        address: editAddress,
-      });
-      setMe(updated);
-      setEditOpen(false);
-      showAlert("저장 완료", "내 정보가 수정되었습니다.");
-    } catch {
-      showAlert("저장 실패", "프로필 수정 API와 enum 값을 확인해주세요.");
+      const data = await listMyReports();
+      setReports(data?.content ?? []);
+    } catch (e) {
+      console.log("리포트 목록 실패:", e);
+      setReports([]);
     }
   }
 
   async function handleGenerate(report: MyReportItem) {
     try {
       await generateReport(report.diagnosisId);
-      showAlert("생성 요청 완료", "백엔드에서 PDF 생성 요청을 받았습니다. 새로고침 후 상태를 확인해주세요.");
-      await reload();
+      Alert.alert("완료", "PDF 생성 완료");
+      await loadReports();
     } catch {
-      showAlert("생성 실패", "리포트 생성 API를 확인해주세요.");
+      Alert.alert("오류", "PDF 생성 실패");
     }
   }
 
   async function handleDownload(report: MyReportItem) {
     try {
-      const bytes = await downloadReport(report.diagnosisId);
-      showAlert("다운로드 API 확인", `PDF 응답 수신 완료 (${bytes} bytes)`);
-    } catch {
-      showAlert("다운로드 실패", "PDF 다운로드 API를 확인해주세요.");
+      const url = await getPdfUrl(report.diagnosisId);
+
+      const fileUri =
+          FileSystem.documentDirectory +
+          `report_${report.diagnosisId}.pdf`;
+
+      await FileSystem.downloadAsync(url, fileUri);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        Alert.alert("다운로드 완료", fileUri);
+      }
+    } catch (e) {
+      console.log("PDF 다운로드 실패:", e);
+      Alert.alert("오류", "다운로드 실패");
     }
   }
 
-  if (loading) {
-    return <ScreenState loading />;
-  }
-
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
-      <Text style={{ fontSize: 22, fontWeight: "800" }}>마이페이지</Text>
+      <ScrollView style={{ padding: 20 }}>
+        <Text style={{ fontSize: 24, marginBottom: 20 }}>
+          마이페이지 - 리포트
+        </Text>
 
-      <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 }}>
-        <Text style={{ fontSize: 16, fontWeight: "800" }}>내 정보</Text>
-        {me ? (
-          <>
-            <Text>아이디: {me.username}</Text>
-            <Text>휴대폰 번호: {me.phoneNumber || "-"}</Text>
-            <Text>거주 유형: {residenceLabel(me.residenceType)}</Text>
-            <Text>임대 유형: {rentLabel(me.rentType)}</Text>
-            <Text>주소: {me.address || "-"}</Text>
+        {Array.isArray(reports) &&
+            reports.map((r) => (
+                <View
+                    key={r.diagnosisId}
+                    style={{
+                      padding: 15,
+                      borderWidth: 1,
+                      borderRadius: 10,
+                      marginBottom: 15,
+                    }}
+                >
+                  <Text>문제 유형: {r.issueType}</Text>
+                  <Text>위험도: {r.riskScore}</Text>
+                  <Text>상태: {r.status}</Text>
 
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-              <Pressable onPress={() => setEditOpen((v) => !v)} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
-                <Text>{editOpen ? "수정 닫기" : "정보 수정"}</Text>
-              </Pressable>
-
-              <Pressable onPress={async () => { await clearAccessToken(); router.replace("/login"); }} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
-                <Text>로그아웃</Text>
-              </Pressable>
-            </View>
-
-            {editOpen && (
-              <View style={{ marginTop: 12, gap: 10, paddingTop: 12, borderTopWidth: 1 }}>
-                <Text style={{ fontWeight: "700" }}>거주 유형</Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {(["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE", "ETC"] as ResidenceType[]).map((t) => (
-                    <Pressable key={t} onPress={() => setEditResidenceType(t)} style={{ paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, opacity: editResidenceType === t ? 1 : 0.6 }}>
-                      <Text>{residenceLabel(t)}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Text style={{ fontWeight: "700" }}>임대 유형</Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {(["NONE", "MONTHLY", "JEONSE", "SALE"] as RentType[]).map((t) => (
-                    <Pressable key={t} onPress={() => setEditRentType(t)} style={{ paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, opacity: editRentType === t ? 1 : 0.6 }}>
-                      <Text>{rentLabel(t)}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Text style={{ fontWeight: "700" }}>휴대폰 번호</Text>
-                <TextInput value={editPhoneNumber} onChangeText={setEditPhoneNumber} placeholder="예) 01012345678" keyboardType="phone-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-
-                <Text style={{ fontWeight: "700" }}>주소</Text>
-                <TextInput value={editAddress} onChangeText={setEditAddress} placeholder="예) 서울시 강남구 ..." style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-
-                <Pressable onPress={handleSaveProfile} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
-                  <Text>저장</Text>
-                </Pressable>
-              </View>
-            )}
-          </>
-        ) : (
-          <Text style={{ opacity: 0.7 }}>내 정보를 불러오지 못했습니다.</Text>
-        )}
-      </View>
-
-      <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 10 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 16, fontWeight: "800" }}>리포트 내역</Text>
-          <Pressable onPress={reload}><Text style={{ textDecorationLine: "underline", opacity: 0.8 }}>새로고침</Text></Pressable>
-        </View>
-
-        {sortedReports.length === 0 ? (
-          <Text style={{ opacity: 0.7 }}>리포트가 아직 없습니다.</Text>
-        ) : (
-          sortedReports.map((r) => {
-            const isReady = r.status === "READY";
-            return (
-              <Pressable key={r.reportId} onPress={() => router.push({ pathname: "/report/[reportId]" as never, params: { reportId: String(r.reportId) } as never })} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
-                <Text style={{ fontWeight: "700" }}>{new Date(r.createdAt).toISOString().slice(0, 10)} · {issueLabel(r.issueType)}</Text>
-                <Text>위험도: {r.riskScore}%</Text>
-                <Text>추천: {r.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>
-                <Text>상태: {r.status}</Text>
-
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
-                  <Pressable onPress={() => handleGenerate(r)} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
-                    <Text>PDF 생성 요청</Text>
+                  <Pressable
+                      onPress={() => handleGenerate(r)}
+                      style={{
+                        backgroundColor: "#4CAF50",
+                        padding: 10,
+                        marginTop: 10,
+                        borderRadius: 5,
+                      }}
+                  >
+                    <Text style={{ color: "white", textAlign: "center" }}>
+                      PDF 생성
+                    </Text>
                   </Pressable>
-                  <Pressable onPress={() => handleDownload(r)} disabled={!isReady} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: isReady ? 1 : 0.4 }}>
-                    <Text>PDF 다운로드</Text>
+
+                  <Pressable
+                      onPress={() => handleDownload(r)}
+                      style={{
+                        backgroundColor: "#2196F3",
+                        padding: 10,
+                        marginTop: 10,
+                        borderRadius: 5,
+                      }}
+                  >
+                    <Text style={{ color: "white", textAlign: "center" }}>
+                      PDF 다운로드
+                    </Text>
                   </Pressable>
                 </View>
-              </Pressable>
-            );
-          })
-        )}
-      </View>
-    </ScrollView>
+            ))}
+      </ScrollView>
   );
 }

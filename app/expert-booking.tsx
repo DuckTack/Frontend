@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { getHistoryDetail, IssueType } from "@/src/api/histories";
-import { getMe } from "@/src/api/users";
+import { getHistoryDetail, IssueType } from "../src/api/histories";
+import { getMe } from "../src/api/users";
 
 function issueLabel(t?: string) {
   switch (t as IssueType) {

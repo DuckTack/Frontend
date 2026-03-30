@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
-import ScreenState from "@/src/components/ScreenState";
+import ScreenState from "../../src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { getMe, Me } from "@/src/api/users";
-import { getHistoryDetail, HistoryDetail } from "@/src/api/histories";
-import { downloadReport, generateReport, getMyReportById, MyReportItem } from "@/src/api/reports";
+import { getMe, Me } from "../../src/api/users";
+import { getHistoryDetail, HistoryDetail } from "../../src/api/histories";
+import { downloadReport, generateReport, getMyReportById, MyReportItem } from "../../src/api/reports";
 
 function fmtIssue(t: HistoryDetail["issueType"]) {
   switch (t) {

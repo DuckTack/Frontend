@@ -4,8 +4,8 @@ import { View, Text, Pressable, ScrollView, Alert } from "react-native";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 
-import { listHistories, deleteHistory, HistorySummary, IssueType } from "@/src/api/histories";
-import { getReportStatusMapForHistoryIds, ReportStatus } from "@/src/api/reports";
+import { listHistories, deleteHistory, HistorySummary, IssueType } from "../src/api/histories";
+import { getReportStatusMapForHistoryIds, ReportStatus } from "../src/api/reports";
 
 function getHistoryId(h: HistorySummary): string {
   const raw: any = (h as any).historyId ?? (h as any).id ?? (h as any).diagnosisId;
@@ -88,7 +88,6 @@ export default function Histories() {
       params: { historyId: getHistoryId(item) },
     });
   }
-
   function deleteItem(id: string) {
     Alert.alert("삭제", "이 진단 기록을 삭제할까요?", [
       { text: "취소", style: "cancel" },
@@ -96,9 +95,12 @@ export default function Histories() {
         text: "삭제",
         style: "destructive",
         onPress: async () => {
-          // 화면에서 먼저 삭제(optimistic update)
-          setItems((prev) => prev.filter((it) => getHistoryId(it) !== id));
-          await deleteHistory(id);
+          try {
+            await deleteHistory(id);
+            fetchList(); // 서버에서 다시 목록 불러오기
+          } catch {
+            Alert.alert("삭제 실패");
+          }
         },
       },
     ]);

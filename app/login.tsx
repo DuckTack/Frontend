@@ -2,8 +2,8 @@ import { useState } from "react";
 import { View, Text, Pressable, Alert, TextInput } from "react-native";
 import { router, Stack } from "expo-router";
 
-import { login } from "@/src/api/auth";
-import { saveAccessToken, saveDevToken } from "@/src/store/tokenStorage";
+import { login } from "../src/api/auth";
+import { saveAccessToken, saveDevToken } from "../src/store/tokenStorage";
 
 export default function Login() {
   const [username, setUsername] = useState("");
