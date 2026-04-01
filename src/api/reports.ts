@@ -1,3 +1,4 @@
+import { Linking } from "react-native";
 import { apiClient } from "./apiClient";
 import { getHistoryDetail, listHistories, type HistoryDetail, type IssueType, type Recommendation } from "./histories";
 
@@ -68,4 +69,15 @@ export async function downloadReport(diagnosisId: string | number): Promise<numb
   });
   const bytes = res.data?.byteLength ?? res.data?.length ?? 0;
   return Number(bytes);
+}
+
+export async function getReportPdfUrl(diagnosisId: string | number): Promise<string> {
+  const res = await apiClient.get(`/api/reports/diagnosis/${diagnosisId}/pdf-url`);
+  const body = res.data?.data ?? res.data;
+  return String(body);
+}
+
+export async function openReportPdf(diagnosisId: string | number): Promise<void> {
+  const url = await getReportPdfUrl(diagnosisId);
+  await Linking.openURL(url);
 }
