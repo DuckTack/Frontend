@@ -3,7 +3,8 @@ import { View, Text, Pressable, Alert, TextInput } from "react-native";
 import { router, Stack } from "expo-router";
 
 import { login } from "@/src/api/auth";
-import { saveAccessToken, saveDevToken } from "@/src/store/tokenStorage";
+import { detectAdmin } from "@/src/api/admin";
+import { saveAccessToken, saveDevToken, saveIsAdmin } from "@/src/store/tokenStorage";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -20,6 +21,8 @@ export default function Login() {
       setIsSubmitting(true);
       const data = await login({ username, password });
       await saveAccessToken(data.accessToken);
+      const isAdmin = await detectAdmin();
+      await saveIsAdmin(isAdmin);
       router.replace("/(tabs)?intro=1");
     } catch {
       Alert.alert("로그인 실패", "아이디/비밀번호 또는 서버 상태를 확인해주세요.");
