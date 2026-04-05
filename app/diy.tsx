@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import { View, Text, Pressable, Linking, Alert, ScrollView } from "react-native";
-import ScreenState from "@/src/components/ScreenState";
+import ScreenState from "../src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
-
-import { getHistoryDetail, IssueType } from "@/src/api/histories";
-import { getDiyGuide, DiyGuide } from "@/src/api/guides";
-
+import { getHistoryDetail, IssueType } from "../src/api/histories";
+import { getDiyGuide, DiyGuide } from "../src/api/guides";
 export default function Diy() {
   const { historyId, issueType } = useLocalSearchParams<{ historyId?: string; issueType?: string }>();
 

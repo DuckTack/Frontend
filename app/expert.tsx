@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View, Text, Pressable, Alert } from "react-native";
-import ScreenState from "@/src/components/ScreenState";
+import ScreenState from "../src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { getHistoryDetail, IssueType } from "@/src/api/histories";
-import { getExpertInfo, ExpertInfo } from "@/src/api/guides";
-import { listExpertVendors, type ExpertVendor, type ExpertVendorSort, VENDOR_REGIONS } from "@/src/api/experts";
+import { getHistoryDetail, IssueType } from "../src/api/histories";
+import { getExpertInfo, ExpertInfo } from "../src/api/guides";
+import { listExpertVendors, type ExpertVendor, type ExpertVendorSort, VENDOR_REGIONS } from "../src/api/experts";
 
 function issueTypeLabel(t: IssueType) {
   switch (t) {
@@ -102,7 +102,7 @@ export default function Expert() {
       <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, gap: 10 }}>
         <Text style={{ fontWeight: "800" }}>지역 선택</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {VENDOR_REGIONS.map((region) => (
+          {VENDOR_REGIONS.map((region: string) => (
             <Pressable key={region} onPress={() => { setSelectedRegion(region); setSortKey("price"); setSortAscending(true); loadVendors(region, "price", true); }} style={{ paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderRadius: 10, opacity: selectedRegion === region ? 1 : 0.55 }}>
               <Text>{region}</Text>
             </Pressable>

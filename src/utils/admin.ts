@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import type { IssueType } from "@/src/api/histories";
-import { getIsAdmin } from "@/src/store/tokenStorage";
+import type { IssueType } from "../api/histories";
+import { getIsAdmin } from "../store/tokenStorage";
 
 export async function ensureAdminOrRedirect() {
   const allowed = await getIsAdmin();

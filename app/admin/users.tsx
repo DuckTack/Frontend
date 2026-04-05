@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import ScreenState from "@/src/components/ScreenState";
-import { listAdminUsers, type AdminUserListItem } from "@/src/api/admin";
-import { ensureAdminOrRedirect } from "@/src/utils/admin";
+import ScreenState from "../../src/components/ScreenState";
+import { listAdminUsers, type AdminUserListItem } from "../../src/api/admin";
+import { ensureAdminOrRedirect } from "../../src/utils/admin";
 
 export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ export default function AdminUsersPage() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
       <Text style={{ fontSize: 22, fontWeight: "800" }}>사용자 조회</Text>
-      <TextInput value={keyword} onChangeText={setKeyword} placeholder="아이디/주소/회원 ID 검색" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      <TextInput value={keyword} onChangeText={setKeyword} placeholder="이름/주소/회원 ID 검색" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
 
       {filtered.length === 0 ? (
         <View style={{ borderWidth: 1, borderRadius: 12, padding: 14 }}><Text style={{ opacity: 0.75 }}>조회된 사용자가 없습니다.</Text></View>

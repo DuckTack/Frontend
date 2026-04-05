@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { View, Text } from "react-native";
 import { router } from "expo-router";
 
-import { startDiagnosis } from "@/src/api/diagnosis";
-import { showAlert } from "@/src/utils/showAlert";
+import { startDiagnosis } from "../src/api/diagnosis";
+import { showAlert } from "../src/utils/showAlert";
 
 const STEPS = ["분석 중...", "판단 중...", "평가 중..."];
 

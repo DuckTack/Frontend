@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
-import ScreenState from "@/src/components/ScreenState";
-import { listAdminCompanies, listAdminUsers } from "@/src/api/admin";
-import { ensureAdminOrRedirect } from "@/src/utils/admin";
+import ScreenState from "../../src/components/ScreenState";
+import { listAdminCompanies, listAdminUsers } from "../../src/api/admin";
+import { ensureAdminOrRedirect } from "../../src/utils/admin";
 
 export default function AdminHome() {
   const [loading, setLoading] = useState(true);

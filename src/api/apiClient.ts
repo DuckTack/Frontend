@@ -1,42 +1,62 @@
-/* 
- Axios 공통 클라이언트
- - baseURL: EXPO_PUBLIC_API_BASE_URL 환경변수 사용
- - 모든 요청에 Authorization: Bearer <token> 자동 주입
- Backend 연동 시 체크:
- - 실제 서버 주소를 EXPO_PUBLIC_API_BASE_URL로 주입했는지
- - 토큰 포맷이 Bearer가 맞는지(백엔드 요구사항 확인)
- */
 import axios from "axios";
-import { getAccessToken, clearAccessToken } from "@/src/store/tokenStorage";
+import { getAccessToken, clearAccessToken } from "../store/tokenStorage";
 
-// Expo 환경변수는 앱에서 읽을 수 있으려면 EXPO_PUBLIC_ prefix가 필요합니다.
-const baseURL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const baseURL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 export const apiClient = axios.create({
-  baseURL,
-  timeout: 10000,
+    baseURL,
+    timeout: 10000,
 });
 
-// 모든 요청에 Authorization 헤더 자동 주입
-apiClient.interceptors.request.use(async (config) => {
-  const token = await getAccessToken();
-  if (token) {
-    config.headers = config.headers ?? {};
-    // axios 헤더 타입이 케이스별로 달라서 any 캐스팅 사용
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (config.headers as any).Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// 요청 인터셉터
+apiClient.interceptors.request.use(
+    async (config) => {
+        try {
+            const token = await getAccessToken();
 
-// (선택) 토큰 만료/401 대응: 토큰 비우기
-apiClient.interceptors.response.use(
-  (res) => res,
-  async (error) => {
-    const status = error?.response?.status;
-    if (status === 401) {
-      await clearAccessToken();
+            if (token) {
+                config.headers = config.headers ?? {};
+                (config.headers as any).Authorization = `Bearer ${token}`;
+            }
+
+            // FormData일 경우 Content-Type 제거 (axios가 자동으로 multipart 설정)
+            if (config.data instanceof FormData) {
+                console.log("📦 FormData 업로드 요청");
+                delete (config.headers as any)["Content-Type"];
+            }
+
+            // @ts-ignore
+            console.log("📡 요청 URL:", config.baseURL + config.url);
+        } catch (e) {
+            console.log("토큰 가져오기 실패");
+        }
+
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
 );
+
+// 응답 인터셉터
+apiClient.interceptors.response.use(
+    (response) => {
+        console.log("✅ 응답 성공:", response.config.url);
+        return response;
+    },
+    async (error) => {
+        console.log("❌ 응답 실패:", error?.response?.status);
+        console.log(error?.response?.data);
+
+        const status = error?.response?.status;
+
+        if (status === 401) {
+            console.log("토큰 만료 → 로그아웃 처리");
+            await clearAccessToken();
+        }
+
+        return Promise.reject(error);
+    }
+);
+
+export default apiClient;
