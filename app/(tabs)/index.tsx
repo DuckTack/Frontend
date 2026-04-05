@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { clearAccessToken } from "@/src/store/tokenStorage";
+import { clearAccessToken } from "../../src/store/tokenStorage";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CELL_SIZE = 13;

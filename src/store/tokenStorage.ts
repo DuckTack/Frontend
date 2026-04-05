@@ -16,13 +16,11 @@ export async function saveIsAdmin(isAdmin: boolean) {
 }
 
 export async function getIsAdmin() {
-  const value = await AsyncStorage.getItem(IS_ADMIN_KEY);
-  return value === "true";
+  return (await AsyncStorage.getItem(IS_ADMIN_KEY)) === "true";
 }
 
 export async function clearAccessToken() {
-  await AsyncStorage.removeItem(ACCESS_TOKEN_KEY);
-  await AsyncStorage.removeItem(IS_ADMIN_KEY);
+  await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, IS_ADMIN_KEY]);
 }
 
 export async function saveDevToken() {

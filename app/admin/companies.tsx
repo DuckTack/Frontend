@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
-import ScreenState from "@/src/components/ScreenState";
-import { listAdminCompanies, getAdminCompanyDetail, setAdminCompanyActive, type AdminCompanyListItem } from "@/src/api/admin";
-import { ensureAdminOrRedirect } from "@/src/utils/admin";
+import ScreenState from "../../src/components/ScreenState";
+import { listAdminCompanies, getAdminCompanyDetail, setAdminCompanyActive, type AdminCompanyListItem } from "../../src/api/admin";
+import { ensureAdminOrRedirect } from "../../src/utils/admin";
 
 export default function AdminCompaniesPage() {
   const [loading, setLoading] = useState(true);

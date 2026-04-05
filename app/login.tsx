@@ -2,9 +2,9 @@ import { useState } from "react";
 import { View, Text, Pressable, Alert, TextInput } from "react-native";
 import { router, Stack } from "expo-router";
 
-import { login } from "@/src/api/auth";
-import { detectAdmin } from "@/src/api/admin";
-import { saveAccessToken, saveDevToken, saveIsAdmin } from "@/src/store/tokenStorage";
+import { login } from "../src/api/auth";
+import { detectAdmin } from "../src/api/admin";
+import { saveAccessToken, saveDevToken, saveIsAdmin } from "../src/store/tokenStorage";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -40,45 +40,14 @@ export default function Login() {
     <View style={{ flex: 1, justifyContent: "center", padding: 20, gap: 12 }}>
       <Text style={{ fontSize: 26, fontWeight: "700", textAlign: "center" }}>Login</Text>
 
-      <TextInput
-        value={username}
-        onChangeText={setUsername}
-        placeholder="아이디"
-        autoCapitalize="none"
-        style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
-      />
+      <TextInput value={username} onChangeText={setUsername} placeholder="아이디" autoCapitalize="none" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      <TextInput value={password} onChangeText={setPassword} placeholder="비밀번호" secureTextEntry style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
 
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        placeholder="비밀번호"
-        secureTextEntry
-        style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
-      />
-
-      <Pressable
-        onPress={handleLogin}
-        disabled={isSubmitting}
-        style={{
-          paddingVertical: 12,
-          borderRadius: 10,
-          borderWidth: 1,
-          alignItems: "center",
-          opacity: isSubmitting ? 0.6 : 1,
-        }}
-      >
+      <Pressable onPress={handleLogin} disabled={isSubmitting} style={{ paddingVertical: 12, borderRadius: 10, borderWidth: 1, alignItems: "center", opacity: isSubmitting ? 0.6 : 1 }}>
         <Text>{isSubmitting ? "로그인 중..." : "로그인"}</Text>
       </Pressable>
 
-      <Pressable
-        onPress={handleDevLogin}
-        style={{
-          paddingVertical: 12,
-          borderRadius: 10,
-          borderWidth: 1,
-          alignItems: "center",
-        }}
-      >
+      <Pressable onPress={handleDevLogin} style={{ paddingVertical: 12, borderRadius: 10, borderWidth: 1, alignItems: "center" }}>
         <Text>DEV 슈퍼계정으로 로그인</Text>
       </Pressable>
 

@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
-import ScreenState from "@/src/components/ScreenState";
-import { getAdminUserDetail, listAdminUserHistories, type AdminUserDetail, type AdminUserHistorySummary } from "@/src/api/admin";
-import { ensureAdminOrRedirect, formatDateTime, issueTypeLabel } from "@/src/utils/admin";
+import ScreenState from "../../../src/components/ScreenState";
+import { getAdminUserDetail, listAdminUserHistories, type AdminUserDetail, type AdminUserHistorySummary } from "../../../src/api/admin";
+import { ensureAdminOrRedirect, formatDateTime, issueTypeLabel } from "../../../src/utils/admin";
 
 export default function AdminUserDetailPage() {
   const { userId } = useLocalSearchParams<{ userId?: string }>();
@@ -108,9 +108,7 @@ export default function AdminUserDetailPage() {
         <Text style={{ fontSize: 18, fontWeight: "800" }}>진단 기록</Text>
 
         {!historyApiAvailable ? (
-          <Text style={{ opacity: 0.75, lineHeight: 20 }}>
-            관리자용 사용자 진단기록 조회 API가 아직 없어 이 영역은 연결 대기 상태입니다.
-          </Text>
+          <Text style={{ opacity: 0.75, lineHeight: 20 }}>관리자용 사용자 진단기록 조회 API가 아직 없어 이 영역은 연결 대기 상태입니다.</Text>
         ) : histories.length === 0 ? (
           <Text style={{ opacity: 0.75 }}>진단 기록이 없습니다.</Text>
         ) : (

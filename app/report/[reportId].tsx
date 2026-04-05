@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import ScreenState from "@/src/components/ScreenState";
+import ScreenState from "../../src/components/ScreenState";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { getMe, Me } from "@/src/api/users";
-import { getHistoryDetail, HistoryDetail } from "@/src/api/histories";
-import { downloadReport, generateReport, getMyReportById, MyReportItem, openReportPdf } from "@/src/api/reports";
-import { loadReportDraft, saveReportDraft, type ReportDraft } from "@/src/store/reportDraftStorage";
+import { getMe, Me } from "../../src/api/users";
+import { getHistoryDetail, HistoryDetail } from "../../src/api/histories";
+import { downloadReport, generateReport, getMyReportById, MyReportItem, openReportPdf } from "../../src/api/reports";
+import { loadReportDraft, saveReportDraft, type ReportDraft } from "../../src/store/reportDraftStorage";
 
 function fmtIssue(t: HistoryDetail["issueType"]) {
   switch (t) {
@@ -24,28 +24,26 @@ function fmtRec(t: HistoryDetail["recommendation"]) {
   return t === "DIY" ? "DIY 권장" : "전문업체 권장";
 }
 
-function emptyDraft(): ReportDraft {
-  return {
-    repairMethod: "",
-    repairDate: "",
-    contractorName: "",
-    contractorContact: "",
-    repairSummary: "",
-    materialCost: "",
-    laborCost: "",
-    totalCost: "",
-    notes: "",
-  };
-}
+const EMPTY_DRAFT: ReportDraft = {
+  repairMethod: "",
+  repairDate: "",
+  contractorName: "",
+  contractorContact: "",
+  repairSummary: "",
+  materialCost: "",
+  laborCost: "",
+  totalCost: "",
+  notes: "",
+};
 
 export default function ReportDetail() {
   const { reportId } = useLocalSearchParams<{ reportId: string }>();
   const [loading, setLoading] = useState(true);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [base, setBase] = useState<MyReportItem | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [history, setHistory] = useState<HistoryDetail | null>(null);
-  const [draft, setDraft] = useState<ReportDraft>(emptyDraft());
-  const [savingDraft, setSavingDraft] = useState(false);
+  const [draft, setDraft] = useState<ReportDraft>(EMPTY_DRAFT);
 
   async function load() {
     try {
@@ -77,27 +75,12 @@ export default function ReportDetail() {
     load();
   }, [reportId]);
 
-  const autoFields = useMemo(() => {
-    if (!history) return [] as string[];
-    return [
-      `문제 유형: ${fmtIssue(history.issueType)}`,
-      `위험도: ${history.riskScore}`,
-      `권장 결과: ${fmtRec(history.recommendation)}`,
-      `진단 상태: ${history.status}`,
-      `리포트 생성 여부: ${history.report ? "생성됨" : "미생성"}`,
-    ];
-  }, [history]);
-
-  function updateDraft<K extends keyof ReportDraft>(key: K, value: ReportDraft[K]) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  }
-
   async function handleSaveDraft() {
     if (!reportId) return;
     try {
       setSavingDraft(true);
       await saveReportDraft(String(reportId), draft);
-      Alert.alert("임시 저장 완료", "추가 입력 정보가 기기 안에 임시 저장되었습니다.");
+      Alert.alert("임시 저장 완료", "수리 후 입력 정보가 기기에 저장되었습니다.");
     } catch {
       Alert.alert("저장 실패", "임시 저장 중 문제가 발생했습니다.");
     } finally {
@@ -109,7 +92,7 @@ export default function ReportDetail() {
     if (!base) return;
     try {
       await generateReport(base.diagnosisId);
-      Alert.alert("생성 요청 완료", "현재 백엔드에서는 자동 진단 정보를 기준으로 PDF를 생성합니다. 사용자가 입력한 추가 정보는 아직 PDF에 반영되지 않습니다.");
+      Alert.alert("생성 요청 완료", "백엔드에서 PDF 생성 요청을 받았습니다. 후입력 정보는 아직 서버 저장 API가 없어 PDF에 자동 반영되지 않을 수 있습니다.");
       await load();
     } catch {
       Alert.alert("생성 실패", "리포트 생성 API를 확인해주세요.");
@@ -119,8 +102,8 @@ export default function ReportDetail() {
   async function handleDownload() {
     if (!base) return;
     try {
-      const bytes = await downloadReport(base.diagnosisId);
-      Alert.alert("다운로드 API 확인", `PDF 응답 수신 완료 (${bytes} bytes)`);
+      const fileUri = await downloadReport(base.diagnosisId);
+      Alert.alert("다운로드 완료", fileUri);
     } catch {
       Alert.alert("다운로드 실패", "리포트 다운로드 API를 확인해주세요.");
     }
@@ -155,36 +138,43 @@ export default function ReportDetail() {
 
       <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 }}>
         <Text style={{ fontSize: 16, fontWeight: "800" }}>자동 반영 정보</Text>
-        {autoFields.map((line) => <Text key={line}>{line}</Text>)}
+        <Text>문제 유형: {fmtIssue(history.issueType)}</Text>
+        <Text>위험도: {history.riskScore}</Text>
+        <Text>권장: {fmtRec(history.recommendation)}</Text>
+        <Text>백엔드 상태: {history.status}</Text>
+        <Text>리포트 첨부 여부: {history.report ? "있음" : "없음"}</Text>
       </View>
 
       <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 10 }}>
-        <Text style={{ fontSize: 16, fontWeight: "800" }}>추가 입력 정보</Text>
-        <Text style={{ opacity: 0.8, lineHeight: 20 }}>
-          이 영역은 사용자가 실제 수리를 마친 뒤에 직접 입력하는 정보입니다. 현재 프론트에서는 임시 저장만 가능하며, 입력값을 서버에 저장하거나 PDF 내용에 반영하는 API는 아직 없습니다.
-        </Text>
+        <Text style={{ fontSize: 16, fontWeight: "800" }}>수리 후 사용자 입력</Text>
 
-        <Text style={{ fontWeight: "700" }}>수리 방식</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
-          <Pressable onPress={() => updateDraft("repairMethod", "DIY")} style={{ flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", opacity: draft.repairMethod === "DIY" ? 1 : 0.55 }}>
+          <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "DIY" }))} style={{ flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", opacity: draft.repairMethod === "DIY" ? 1 : 0.6 }}>
             <Text>직접 수리</Text>
           </Pressable>
-          <Pressable onPress={() => updateDraft("repairMethod", "PRO")} style={{ flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", opacity: draft.repairMethod === "PRO" ? 1 : 0.55 }}>
+          <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "PRO" }))} style={{ flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", opacity: draft.repairMethod === "PRO" ? 1 : 0.6 }}>
             <Text>전문업체 수리</Text>
           </Pressable>
         </View>
 
-        <TextInput value={draft.repairDate} onChangeText={(v) => updateDraft("repairDate", v)} placeholder="수리 완료일 (예: 2026-04-01)" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={draft.contractorName} onChangeText={(v) => updateDraft("contractorName", v)} placeholder="업체명 또는 수리자명" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={draft.contractorContact} onChangeText={(v) => updateDraft("contractorContact", v)} placeholder="연락처" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={draft.repairSummary} onChangeText={(v) => updateDraft("repairSummary", v)} placeholder="수리 내용 요약" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 90, textAlignVertical: "top" }} />
-        <TextInput value={draft.materialCost} onChangeText={(v) => updateDraft("materialCost", v)} placeholder="재료비" keyboardType="numeric" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={draft.laborCost} onChangeText={(v) => updateDraft("laborCost", v)} placeholder="인건비" keyboardType="numeric" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={draft.totalCost} onChangeText={(v) => updateDraft("totalCost", v)} placeholder="총 비용" keyboardType="numeric" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={draft.notes} onChangeText={(v) => updateDraft("notes", v)} placeholder="기타 메모" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 90, textAlignVertical: "top" }} />
+        <TextInput value={draft.repairDate} onChangeText={(text) => setDraft((prev) => ({ ...prev, repairDate: text }))} placeholder="수리 완료일 (예: 2026-04-06)" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+        <TextInput value={draft.contractorName} onChangeText={(text) => setDraft((prev) => ({ ...prev, contractorName: text }))} placeholder="수리자명 또는 업체명" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+        <TextInput value={draft.contractorContact} onChangeText={(text) => setDraft((prev) => ({ ...prev, contractorContact: text }))} placeholder="연락처" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+        <TextInput value={draft.repairSummary} onChangeText={(text) => setDraft((prev) => ({ ...prev, repairSummary: text }))} placeholder="실제 작업 요약" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 90, textAlignVertical: "top" }} />
+
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <TextInput value={draft.materialCost} onChangeText={(text) => setDraft((prev) => ({ ...prev, materialCost: text.replace(/[^0-9]/g, "") }))} placeholder="재료비" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderRadius: 10, padding: 12 }} />
+          <TextInput value={draft.laborCost} onChangeText={(text) => setDraft((prev) => ({ ...prev, laborCost: text.replace(/[^0-9]/g, "") }))} placeholder="인건비" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderRadius: 10, padding: 12 }} />
+        </View>
+        <TextInput value={draft.totalCost} onChangeText={(text) => setDraft((prev) => ({ ...prev, totalCost: text.replace(/[^0-9]/g, "") }))} placeholder="총 비용" keyboardType="number-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+        <TextInput value={draft.notes} onChangeText={(text) => setDraft((prev) => ({ ...prev, notes: text }))} placeholder="추가 메모" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 90, textAlignVertical: "top" }} />
+
+        <Text style={{ opacity: 0.75, lineHeight: 20 }}>
+          현재 백엔드에는 후입력 정보를 저장하거나 PDF 생성 시 함께 반영하는 API가 없어, 이 정보는 우선 기기에 임시 저장됩니다.
+        </Text>
 
         <Pressable onPress={handleSaveDraft} disabled={savingDraft} style={{ borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", opacity: savingDraft ? 0.5 : 1 }}>
-          <Text>{savingDraft ? "저장 중..." : "추가 입력 임시 저장"}</Text>
+          <Text>{savingDraft ? "저장 중..." : "후입력 정보 임시 저장"}</Text>
         </Pressable>
       </View>
 

@@ -1,7 +1,14 @@
 import { apiClient } from "./apiClient";
-import { getAccessToken } from "@/src/store/tokenStorage";
+import { getAccessToken } from "../store/tokenStorage";
 
-export type ResidenceType = "ONE_ROOM" | "OFFICETEL" | "APT" | "VILLA" | "HOUSE" | "ETC";
+export type ResidenceType =
+    | "ONE_ROOM"
+    | "OFFICETEL"
+    | "APT"
+    | "VILLA"
+    | "HOUSE"
+    | "ETC";
+
 export type RentType = "NONE" | "MONTHLY" | "JEONSE" | "SALE";
 
 export type Me = {
@@ -12,7 +19,10 @@ export type Me = {
   address: string;
 };
 
-export type UpdateMeRequest = Pick<Me, "residenceType" | "rentType" | "address"> & {
+export type UpdateMeRequest = Pick<
+    Me,
+    "residenceType" | "rentType" | "address"
+> & {
   phoneNumber?: string;
 };
 
@@ -35,6 +45,7 @@ export async function getMe(): Promise<Me> {
   const res = await apiClient.get("/api/users/me");
   const body = res.data;
   const data = body?.data ?? body;
+
   return {
     username: data.username,
     phoneNumber: data.phoneNumber ?? "",
@@ -52,6 +63,7 @@ export async function updateMe(req: UpdateMeRequest): Promise<Me> {
   const res = await apiClient.put("/api/users/me", req);
   const body = res.data;
   const data = body?.data ?? body;
+
   return {
     username: data.username,
     phoneNumber: data.phoneNumber ?? "",

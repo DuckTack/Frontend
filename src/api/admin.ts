@@ -87,7 +87,6 @@ function normalizeRecommendation(riskScore: number): "DIY" | "PRO" {
 }
 
 function normalizeUserHistory(raw: any): AdminUserHistorySummary {
-  const reportValue = raw?.report;
   return {
     historyId: Number(raw?.id ?? raw?.historyId ?? 0),
     createdAt: String(raw?.createdAt ?? new Date().toISOString()),
@@ -95,7 +94,7 @@ function normalizeUserHistory(raw: any): AdminUserHistorySummary {
     riskScore: Number(raw?.riskScore ?? 0),
     status: String(raw?.status ?? "UNKNOWN"),
     recommendation: normalizeRecommendation(Number(raw?.riskScore ?? 0)),
-    report: Boolean(reportValue),
+    report: Boolean(raw?.report),
   };
 }
 

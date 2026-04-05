@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { showAlert } from "@/src/utils/showAlert";
-
-import ScreenState from "@/src/components/ScreenState";
-import { clearAccessToken } from "@/src/store/tokenStorage";
-import { downloadReport, generateReport, listMyReports, MyReportItem } from "@/src/api/reports";
-import { getMe, updateMe, Me, ResidenceType, RentType } from "@/src/api/users";
+import ScreenState from "../src/components/ScreenState";
+import { clearAccessToken } from "../src/store/tokenStorage";
+import { downloadReport, generateReport, listMyReports, MyReportItem } from "../src/api/reports";
+import { getMe, updateMe, Me, ResidenceType, RentType } from "../src/api/users";
 
 function residenceLabel(t: ResidenceType) {
   switch (t) {
@@ -52,21 +50,27 @@ export default function MyPage() {
   const [editAddress, setEditAddress] = useState("");
 
   async function reload() {
-    try {
-      setLoading(true);
-      const [meData, reportData] = await Promise.all([getMe(), listMyReports()]);
-      setMe(meData);
-      setReports(reportData);
-      setEditResidenceType(meData.residenceType);
-      setEditRentType(meData.rentType);
-      setEditPhoneNumber(meData.phoneNumber ?? "");
-      setEditAddress(meData.address ?? "");
-    } catch {
-      showAlert("불러오기 실패", "로그인 상태/서버 상태를 확인해주세요.");
-    } finally {
-      setLoading(false);
-    }
+  try {
+    setLoading(true);
+
+    const [meData, reportData] = await Promise.all([getMe(), listMyReports()]);
+
+    setMe(meData);
+    setReports(reportData);
+
+    setEditResidenceType(meData.residenceType);
+    setEditRentType(meData.rentType);
+    setEditPhoneNumber(meData.phoneNumber ?? "");
+    setEditAddress(meData.address ?? "");
+  } catch (e) {
+    console.log("마이페이지 불러오기 실패:", e);
+    setMe(null);
+    setReports([]);
+    Alert.alert("불러오기 실패", "서버 상태를 확인해주세요.");
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     reload();
@@ -84,28 +88,28 @@ export default function MyPage() {
       });
       setMe(updated);
       setEditOpen(false);
-      showAlert("저장 완료", "내 정보가 수정되었습니다.");
+      alert("내 정보가 수정되었습니다.");
     } catch {
-      showAlert("저장 실패", "프로필 수정 API와 enum 값을 확인해주세요.");
+      alert("프로필 수정 API를 확인해주세요.");
     }
   }
 
   async function handleGenerate(report: MyReportItem) {
     try {
       await generateReport(report.diagnosisId);
-      showAlert("생성 요청 완료", "백엔드에서 PDF 생성 요청을 받았습니다. 새로고침 후 상태를 확인해주세요.");
+      alert("PDF 생성 요청이 완료되었습니다.");
       await reload();
     } catch {
-      showAlert("생성 실패", "리포트 생성 API를 확인해주세요.");
+      alert("리포트 생성 API를 확인해주세요.");
     }
   }
 
   async function handleDownload(report: MyReportItem) {
     try {
-      const bytes = await downloadReport(report.diagnosisId);
-      showAlert("다운로드 API 확인", `PDF 응답 수신 완료 (${bytes} bytes)`);
+      const fileUri = await downloadReport(report.diagnosisId);
+      alert(`다운로드 완료: ${fileUri}`);
     } catch {
-      showAlert("다운로드 실패", "PDF 다운로드 API를 확인해주세요.");
+      alert("PDF 다운로드 API를 확인해주세요.");
     }
   }
 
@@ -186,7 +190,7 @@ export default function MyPage() {
           sortedReports.map((r) => {
             const isReady = r.status === "READY";
             return (
-              <Pressable key={r.reportId} onPress={() => router.push({ pathname: "/report/[reportId]" as never, params: { reportId: String(r.reportId) } as never })} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
+              <Pressable key={r.reportId} onPress={() => router.push({ pathname: "/report/[reportId]", params: { reportId: String(r.reportId) } })} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
                 <Text style={{ fontWeight: "700" }}>{new Date(r.createdAt).toISOString().slice(0, 10)} · {issueLabel(r.issueType)}</Text>
                 <Text>위험도: {r.riskScore}%</Text>
                 <Text>추천: {r.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>
