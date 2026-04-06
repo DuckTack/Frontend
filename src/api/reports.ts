@@ -1,9 +1,6 @@
-import * as FileSystem from "expo-file-system/legacy";
 import { Linking } from "react-native";
 import { apiClient } from "./apiClient";
 import { getHistoryDetail, listHistories, type HistoryDetail, type IssueType, type Recommendation } from "./histories";
-
-const FS: any = FileSystem;
 
 export type ReportStatus = "NONE" | "GENERATING" | "READY" | "FAILED";
 
@@ -42,35 +39,9 @@ export async function listMyReports(): Promise<MyReportItem[]> {
   const completed = histories.filter((item) => item.status !== "ANALYZING" || item.diagnosisId);
   const details = await Promise.all(completed.map((item) => getHistoryDetail(item.id)));
   return details
-    .filter((detail) => Boolean(detail.diagnosisId))
-    .map(toReportItem)
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-}
-
-export async function getMyReportById(reportId: string): Promise<MyReportItem | null> {
-  const detail = await getHistoryDetail(reportId);
-  if (!detail?.diagnosisId) return null;
-  return toReportItem(detail);
-}
-
-export async function getReportStatusMapForHistoryIds(
-  historyIds: string[]
-): Promise<Record<string, ReportStatus>> {
-  const uniqueIds = [...new Set(historyIds.filter(Boolean))];
-  if (uniqueIds.length === 0) return {};
-
-  const details = await Promise.all(
-    uniqueIds.map(async (historyId) => {
-      try {
-        const detail = await getHistoryDetail(historyId);
-        return [historyId, statusFromHistory(detail)] as const;
-      } catch {
-        return [historyId, "NONE" as ReportStatus] as const;
-      }
-    })
-  );
-
-  return Object.fromEntries(details);
+      .filter((detail) => Boolean(detail.diagnosisId))
+      .map(toReportItem)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function generateReport(diagnosisId: string | number): Promise<void> {
@@ -82,13 +53,7 @@ export async function getPdfUrl(diagnosisId: string | number): Promise<string> {
   return String(res.data?.data ?? res.data);
 }
 
-export async function downloadReport(diagnosisId: string | number): Promise<string> {
-  const url = await getPdfUrl(diagnosisId);
-  const fileUri = FS.documentDirectory + `report_${diagnosisId}.pdf`;
-  await FS.downloadAsync(url, fileUri);
-  return fileUri;
-}
-
+// ★★★ 이게 브라우저에서 PDF 바로 열기 ★★★
 export async function openReportPdf(diagnosisId: string | number): Promise<void> {
   const url = await getPdfUrl(diagnosisId);
   await Linking.openURL(url);
