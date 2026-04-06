@@ -3,7 +3,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 import { router } from "expo-router";
 import ScreenState from "../src/components/ScreenState";
 import { clearAccessToken } from "../src/store/tokenStorage";
-import { downloadReport, generateReport, listMyReports, MyReportItem } from "../src/api/reports";
+import { openReportPdf, generateReport, listMyReports, MyReportItem } from "../src/api/reports";
 import { getMe, updateMe, Me, ResidenceType, RentType } from "../src/api/users";
 
 function residenceLabel(t: ResidenceType) {
@@ -106,10 +106,9 @@ export default function MyPage() {
 
   async function handleDownload(report: MyReportItem) {
     try {
-      const fileUri = await downloadReport(report.diagnosisId);
-      alert(`다운로드 완료: ${fileUri}`);
+      await openReportPdf(report.diagnosisId);
     } catch {
-      alert("PDF 다운로드 API를 확인해주세요.");
+      alert("PDF 다운로드 실패");
     }
   }
 
