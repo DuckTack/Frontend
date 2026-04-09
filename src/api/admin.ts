@@ -3,18 +3,24 @@ import type { IssueType } from "./histories";
 
 export type AdminUserListItem = {
   id: number;
-  name: string;
-  address: string;
+  username: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  residenceType?: string;
+  rentType?: string;
+  role?: string;
 };
 
 export type AdminUserDetail = {
   id: number;
   username: string;
+  email?: string;
   role: "USER" | "ADMIN" | string;
-  phoneNumber: string;
-  address: string;
-  residenceType: string;
-  rentType: string;
+  phoneNumber?: string;
+  address?: string;
+  residenceType?: string;
+  rentType?: string;
   createdAt: string;
 };
 
@@ -86,6 +92,33 @@ function normalizeRecommendation(riskScore: number): "DIY" | "PRO" {
   return Number(riskScore ?? 0) >= 70 ? "PRO" : "DIY";
 }
 
+function normalizeAdminUser(raw: any): AdminUserListItem {
+  return {
+    id: Number(raw?.id ?? 0),
+    username: String(raw?.username ?? raw?.name ?? ""),
+    email: raw?.email ? String(raw.email) : undefined,
+    phoneNumber: raw?.phoneNumber ? String(raw.phoneNumber) : undefined,
+    address: raw?.address ? String(raw.address) : undefined,
+    residenceType: raw?.residenceType ? String(raw.residenceType) : undefined,
+    rentType: raw?.rentType ? String(raw.rentType) : undefined,
+    role: raw?.role ? String(raw.role) : undefined,
+  };
+}
+
+function normalizeAdminUserDetail(raw: any): AdminUserDetail {
+  return {
+    id: Number(raw?.id ?? 0),
+    username: String(raw?.username ?? raw?.name ?? ""),
+    email: raw?.email ? String(raw.email) : undefined,
+    role: String(raw?.role ?? "USER"),
+    phoneNumber: raw?.phoneNumber ? String(raw.phoneNumber) : undefined,
+    address: raw?.address ? String(raw.address) : undefined,
+    residenceType: raw?.residenceType ? String(raw.residenceType) : undefined,
+    rentType: raw?.rentType ? String(raw.rentType) : undefined,
+    createdAt: String(raw?.createdAt ?? new Date().toISOString()),
+  };
+}
+
 function normalizeUserHistory(raw: any): AdminUserHistorySummary {
   return {
     historyId: Number(raw?.id ?? raw?.historyId ?? 0),
@@ -113,12 +146,12 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   const res = await apiClient.get("/api/admin/users", {
     params: { page: 0, size: 100, sort: "id,desc" },
   });
-  return unwrapPage<AdminUserListItem>(res.data);
+  return unwrapPage<any>(res.data).map(normalizeAdminUser);
 }
 
 export async function getAdminUserDetail(id: number): Promise<AdminUserDetail> {
   const res = await apiClient.get(`/api/admin/users/${id}`);
-  return unwrap<AdminUserDetail>(res.data);
+  return normalizeAdminUserDetail(unwrap<any>(res.data));
 }
 
 export async function listAdminUserHistories(id: number): Promise<AdminUserHistorySummary[]> {

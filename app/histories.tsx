@@ -1,11 +1,10 @@
 // 삭제 버튼을 누르면 목록에서 사라진 거처럼 보이지만 나갔다 들어오면 다시 생김
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, Pressable, ScrollView, Alert } from "react-native";
 import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { listHistories, deleteHistory, HistorySummary, IssueType } from "../src/api/histories";
-import { getReportStatusMapForHistoryIds, ReportStatus } from "../src/api/reports";
 
 function getHistoryId(h: HistorySummary): string {
   const raw: any = (h as any).historyId ?? (h as any).id ?? (h as any).diagnosisId;
@@ -31,23 +30,22 @@ function issueLabel(t: IssueType) {
   }
 }
 
+function reportLabel(item: HistorySummary): string {
+  if (item.status === "FAILED") return "리포트: 실패";
+  if (item.report) return "리포트: 제출용(READY)";
+  if (item.status === "COMPLETED" && item.diagnosisId) return "리포트: 생성 중";
+  return "리포트: 없음";
+}
+
 export default function Histories() {
   const [items, setItems] = useState<HistorySummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [reportStatus, setReportStatus] = useState<Record<string, ReportStatus>>({});
 
   async function fetchList() {
     try {
       setLoading(true);
       const data = await listHistories();
       setItems(data);
-
-      // 히스토리 목록에서 바로 "리포트(PDF) 준비 여부"를 보여주기 위해 status map을 함께 로드
-      const ids = data
-        .map((d) => getHistoryId(d))
-        .filter((x): x is string => Boolean(x));
-      const map = await getReportStatusMapForHistoryIds(ids);
-      setReportStatus(map);
     } catch {
       Alert.alert("불러오기 실패", "서버 상태를 확인해주세요.");
     } finally {
@@ -60,25 +58,14 @@ export default function Histories() {
   }, []);
 
   useFocusEffect(
-    // 탭으로 왔다 갔다 해도 새 진단 내역이 반영되도록
-    useMemo(() => {
-      return () => {
-        fetchList();
-      };
+    useCallback(() => {
+      fetchList();
     }, [])
   );
 
   const sorted = useMemo(() => {
     return [...items].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   }, [items]);
-
-  function reportLabel(id: string): string {
-    const st = reportStatus[id];
-    if (!st || st === "NONE") return "리포트: 없음";
-    if (st === "GENERATING") return "리포트: 생성 중";
-    if (st === "READY") return "리포트: 제출용(READY)";
-    return "리포트: 실패";
-  }
 
   function openDetail(item: HistorySummary) {
     // ✅ 앞으로는 params로 값 전체를 넘기지 않고 id만 넘깁니다.
@@ -88,6 +75,7 @@ export default function Histories() {
       params: { historyId: getHistoryId(item) },
     });
   }
+
   function deleteItem(id: string) {
     Alert.alert("삭제", "이 진단 기록을 삭제할까요?", [
       { text: "취소", style: "cancel" },
@@ -128,7 +116,7 @@ export default function Histories() {
 
               <Text>위험도: {it.riskScore}%</Text>
               <Text>추천: {it.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>
-              <Text style={{ opacity: 0.85 }}>{reportLabel(getHistoryId(it))}</Text>
+              <Text style={{ opacity: 0.85 }}>{reportLabel(it)}</Text>
 
               <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
                 <Pressable

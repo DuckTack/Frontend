@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View, Text, TextInput, Pressable, Alert, ScrollView } from "react-native";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 
 import {
   checkEmailAvailable,
@@ -30,6 +30,8 @@ const RENT_LABELS: Record<RentType, string> = {
 };
 
 export default function Signup() {
+  const { consent } = useLocalSearchParams<{ consent?: string }>();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -55,6 +57,12 @@ export default function Signup() {
   const [rentType, setRentType] = useState<RentType>("NONE");
 
   const normalizedPhone = useMemo(() => phoneNumber.replace(/[^0-9]/g, ""), [phoneNumber]);
+
+  useEffect(() => {
+    if (consent === "1") return;
+    Alert.alert("동의 필요", "개인정보 동의 화면을 먼저 완료한 뒤 회원가입을 진행해주세요.");
+    router.replace("/signup-consent");
+  }, [consent]);
 
   async function handleCheckUsername() {
     const trimmed = username.trim();
@@ -285,7 +293,7 @@ export default function Signup() {
         keyboardType="number-pad"
         style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
       />
-      <Pressable onPress={handleVerifyEmail} disabled={verifyingEmailCode || !emailCodeSent} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: verifyingEmailCode || !emailCodeSent ? 0.6 : 1 }}>
+      <Pressable onPress={handleVerifyEmail} disabled={verifyingEmailCode || !emailCodeSent || !verificationCode.trim()} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: verifyingEmailCode || !emailCodeSent || !verificationCode.trim() ? 0.6 : 1 }}>
         <Text>{verifyingEmailCode ? "확인 중..." : "이메일 인증 확인"}</Text>
       </Pressable>
 
@@ -344,7 +352,7 @@ export default function Signup() {
         <Text>{isSubmitting ? "회원가입 중..." : "회원가입"}</Text>
       </Pressable>
 
-      <Pressable onPress={() => router.back()} style={{ paddingVertical: 10, alignItems: "center" }}>
+      <Pressable onPress={() => router.replace("/login")} style={{ paddingVertical: 10, alignItems: "center" }}>
         <Text style={{ textDecorationLine: "underline" }}>로그인으로 돌아가기</Text>
       </Pressable>
 

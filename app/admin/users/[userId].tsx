@@ -74,6 +74,7 @@ export default function AdminUserDetailPage() {
         <Text style={{ fontSize: 18, fontWeight: "800" }}>기본 정보</Text>
         <Text>회원 ID: {user.id}</Text>
         <Text>아이디: {user.username}</Text>
+        <Text>이메일: {user.email || "-"}</Text>
         <Text>권한: {user.role}</Text>
         <Text>전화번호: {user.phoneNumber || "-"}</Text>
         <Text>주소: {user.address || "-"}</Text>
