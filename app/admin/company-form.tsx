@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { IssueType } from "../../src/api/histories";
@@ -7,17 +7,28 @@ import { ensureAdminOrRedirect, issueTypeLabel } from "../../src/utils/admin";
 
 const ISSUE_OPTIONS: IssueType[] = ["CRACK", "LEAK", "MOLD", "DAMAGE", "ELECTRIC", "GAS", "ETC"];
 
-function onlyDigits(value: string) {
-  return value.replace(/[^0-9]/g, "");
-}
-
 function isValidPhone(value: string) {
-  const digits = onlyDigits(value);
+  const digits = value.replace(/[^0-9]/g, "");
   return digits.length >= 9 && digits.length <= 11;
 }
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function FieldBlock({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={{ fontWeight: "700" }}>{label}</Text>
+      {children}
+    </View>
+  );
 }
 
 export default function AdminCompanyFormPage() {
@@ -154,20 +165,42 @@ export default function AdminCompanyFormPage() {
   }
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 40 }}>
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
       <Text style={{ fontSize: 22, fontWeight: "800" }}>{editMode ? "업체 수정" : "업체 등록"}</Text>
 
-      <TextInput value={name} onChangeText={setName} placeholder="업체명 *" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={businessRegistrationNumber} onChangeText={setBusinessRegistrationNumber} placeholder="사업자등록번호" keyboardType="number-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={representativeName} onChangeText={setRepresentativeName} placeholder="대표자명" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={phone} onChangeText={setPhone} placeholder="전화번호" keyboardType="phone-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={email} onChangeText={setEmail} placeholder="이메일" autoCapitalize="none" keyboardType="email-address" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={addressLine} onChangeText={setAddressLine} placeholder="주소" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={postalCode} onChangeText={setPostalCode} placeholder="우편번호" keyboardType="number-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      <TextInput value={serviceRegionLabel} onChangeText={setServiceRegionLabel} placeholder="서비스 지역 *" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      <FieldBlock label="업체명 *">
+        <TextInput value={name} onChangeText={setName} placeholder="예: 뚝딱 홈케어" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
 
-      <View style={{ gap: 8 }}>
-        <Text style={{ fontWeight: "700" }}>전문 분야</Text>
+      <FieldBlock label="사업자등록번호">
+        <TextInput value={businessRegistrationNumber} onChangeText={setBusinessRegistrationNumber} placeholder="예: 123-45-67890" keyboardType="number-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="대표자명">
+        <TextInput value={representativeName} onChangeText={setRepresentativeName} placeholder="예: 김대표" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="전화번호">
+        <TextInput value={phone} onChangeText={setPhone} placeholder="예: 01012345678" keyboardType="phone-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="이메일">
+        <TextInput value={email} onChangeText={setEmail} placeholder="예: help@company.com" autoCapitalize="none" keyboardType="email-address" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="주소">
+        <TextInput value={addressLine} onChangeText={setAddressLine} placeholder="예: 서울특별시 강남구 ..." style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="우편번호">
+        <TextInput value={postalCode} onChangeText={setPostalCode} placeholder="예: 06123" keyboardType="number-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="서비스 지역 *">
+        <TextInput value={serviceRegionLabel} onChangeText={setServiceRegionLabel} placeholder="예: 서울 강남구" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+      </FieldBlock>
+
+      <FieldBlock label="전문 분야">
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {ISSUE_OPTIONS.map((issue) => {
             const selected = selectedSpecialties.includes(issue);
@@ -178,15 +211,22 @@ export default function AdminCompanyFormPage() {
             );
           })}
         </View>
-      </View>
+      </FieldBlock>
 
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <TextInput value={minEstimatedQuoteKrw} onChangeText={setMinEstimatedQuoteKrw} placeholder="최소 견적" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderRadius: 10, padding: 12 }} />
-        <TextInput value={maxEstimatedQuoteKrw} onChangeText={setMaxEstimatedQuoteKrw} placeholder="최대 견적" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderRadius: 10, padding: 12 }} />
-      </View>
+      <FieldBlock label="예상 견적 범위">
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <TextInput value={minEstimatedQuoteKrw} onChangeText={setMinEstimatedQuoteKrw} placeholder="최소 견적" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderRadius: 10, padding: 12 }} />
+          <TextInput value={maxEstimatedQuoteKrw} onChangeText={setMaxEstimatedQuoteKrw} placeholder="최대 견적" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderRadius: 10, padding: 12 }} />
+        </View>
+      </FieldBlock>
 
-      <TextInput value={capabilityNote} onChangeText={setCapabilityNote} placeholder="업체 설명" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 100, textAlignVertical: "top" }} />
-      <TextInput value={adminMemo} onChangeText={setAdminMemo} placeholder="관리자 메모" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 100, textAlignVertical: "top" }} />
+      <FieldBlock label="업체 설명">
+        <TextInput value={capabilityNote} onChangeText={setCapabilityNote} placeholder="예: 누수 탐지 장비 보유, 당일 방문 가능" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 100, textAlignVertical: "top" }} />
+      </FieldBlock>
+
+      <FieldBlock label="관리자 메모">
+        <TextInput value={adminMemo} onChangeText={setAdminMemo} placeholder="예: 제휴 진행 중 / 응답 빠름" multiline style={{ borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 100, textAlignVertical: "top" }} />
+      </FieldBlock>
 
       <Pressable onPress={handleSave} disabled={saving} style={{ borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", opacity: saving ? 0.5 : 1 }}>
         <Text>{saving ? "저장 중..." : editMode ? "수정 저장" : "업체 등록"}</Text>

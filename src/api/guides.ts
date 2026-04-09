@@ -1,10 +1,19 @@
 import type { IssueType } from "./histories";
 
+export type DiyMaterial = {
+  id: string;
+  name: string;
+  approxCost?: string;
+  reason?: string;
+  note?: string;
+  buyUrl?: string;
+};
+
 export type DiyGuide = {
   title: string;
   steps: string[];
   cautions?: string[];
-  materials?: { name: string; approxCost?: string; note?: string; buyUrl?: string }[];
+  materials?: DiyMaterial[];
 };
 
 export type ExpertInfo = {
@@ -30,10 +39,35 @@ export async function getDiyGuide(issueType: IssueType): Promise<DiyGuide> {
       ],
       cautions: ["호흡기 민감하면 마스크/장갑 착용", "재발하면 근본 원인(결로/누수) 점검"],
       materials: [
-        { name: "곰팡이 제거제", approxCost: "약 5천~2만원", note: "염소계/비염소계 확인", buyUrl: coupangSearchUrl("곰팡이 제거제") },
-        { name: "마스크/장갑", approxCost: "약 2천~1만원", buyUrl: coupangSearchUrl("마스크 장갑") },
-        { name: "걸레/수세미", approxCost: "약 1천~5천원", buyUrl: coupangSearchUrl("걸레 수세미") },
-        { name: "제습제/제습기(선택)", approxCost: "상황에 따라", buyUrl: coupangSearchUrl("제습제") },
+        {
+          id: "mold-remover",
+          name: "곰팡이 제거제",
+          approxCost: "약 5천~2만원",
+          reason: "벽지·욕실 실리콘·창틀처럼 곰팡이가 퍼진 표면을 빠르게 정리할 때 가장 먼저 필요한 핵심 자재입니다.",
+          note: "염소계/비염소계 확인",
+          buyUrl: coupangSearchUrl("곰팡이 제거제"),
+        },
+        {
+          id: "mask-gloves",
+          name: "마스크 / 장갑",
+          approxCost: "약 2천~1만원",
+          reason: "곰팡이 포자와 세정 성분으로부터 호흡기와 피부를 보호하기 위해 함께 준비하는 것이 좋습니다.",
+          buyUrl: coupangSearchUrl("마스크 장갑"),
+        },
+        {
+          id: "cloth-scrubber",
+          name: "걸레 / 수세미",
+          approxCost: "약 1천~5천원",
+          reason: "약제를 도포한 뒤 닦아내고 마무리 청소할 때 필요합니다.",
+          buyUrl: coupangSearchUrl("걸레 수세미"),
+        },
+        {
+          id: "dehumidifier",
+          name: "제습제 / 제습기",
+          approxCost: "상황에 따라",
+          reason: "곰팡이 재발을 막으려면 제거 후에도 습도 관리가 중요해 보조 자재로 추천합니다.",
+          buyUrl: coupangSearchUrl("제습제"),
+        },
       ],
     };
   }
@@ -44,9 +78,29 @@ export async function getDiyGuide(issueType: IssueType): Promise<DiyGuide> {
       steps: ["물 공급 차단(가능한 경우)", "주변 물기 제거 및 전기기기 분리", "누수 지점 임시 테이핑", "전문업체 점검 예약"],
       cautions: ["전기 감전 위험 주의", "임시 조치는 장기 해결이 아님"],
       materials: [
-        { name: "방수 테이프/실리콘", approxCost: "약 3천~2만원", note: "응급 처치용", buyUrl: coupangSearchUrl("방수 테이프") },
-        { name: "대야/걸레", approxCost: "약 1천~1만원", buyUrl: coupangSearchUrl("대야 걸레") },
-        { name: "절연 장갑(선택)", approxCost: "약 5천~2만원", buyUrl: coupangSearchUrl("절연 장갑") },
+        {
+          id: "waterproof-tape",
+          name: "방수 테이프 / 실리콘",
+          approxCost: "약 3천~2만원",
+          reason: "응급 상황에서 물이 번지는 속도를 늦추고 추가 피해를 막는 데 도움이 됩니다.",
+          note: "응급 처치용",
+          buyUrl: coupangSearchUrl("방수 테이프"),
+        },
+        {
+          id: "bucket-cloth",
+          name: "대야 / 걸레",
+          approxCost: "약 1천~1만원",
+          reason: "떨어지는 물을 임시로 받고 주변 바닥 손상을 줄이는 기본 준비물입니다.",
+          buyUrl: coupangSearchUrl("대야 걸레"),
+        },
+        {
+          id: "insulated-gloves",
+          name: "절연 장갑",
+          approxCost: "약 5천~2만원",
+          reason: "전기설비 주변 누수라면 안전 확보를 위해 준비하는 것이 좋습니다.",
+          note: "선택 준비물",
+          buyUrl: coupangSearchUrl("절연 장갑"),
+        },
       ],
     };
   }
@@ -55,8 +109,20 @@ export async function getDiyGuide(issueType: IssueType): Promise<DiyGuide> {
     title: "DIY 가이드",
     steps: ["문제 부위를 촬영해 기록", "주변 정리 및 안전장비 착용", "가벼운 오염 제거", "필요 시 전문가 상담"],
     materials: [
-      { name: "기본 청소 도구", approxCost: "약 5천~2만원", buyUrl: coupangSearchUrl("청소 도구 세트") },
-      { name: "보호 장갑", approxCost: "약 2천~8천원", buyUrl: coupangSearchUrl("보호 장갑") },
+      {
+        id: "basic-cleaning-kit",
+        name: "기본 청소 도구",
+        approxCost: "약 5천~2만원",
+        reason: "간단한 오염 제거와 주변 정리를 시작할 때 가장 범용적으로 사용할 수 있습니다.",
+        buyUrl: coupangSearchUrl("청소 도구 세트"),
+      },
+      {
+        id: "protective-gloves",
+        name: "보호 장갑",
+        approxCost: "약 2천~8천원",
+        reason: "청소 약품이나 날카로운 파손 부위를 다룰 때 손을 보호합니다.",
+        buyUrl: coupangSearchUrl("보호 장갑"),
+      },
     ],
   };
 }

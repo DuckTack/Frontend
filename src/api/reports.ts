@@ -39,9 +39,29 @@ export async function listMyReports(): Promise<MyReportItem[]> {
   const completed = histories.filter((item) => item.status !== "ANALYZING" || item.diagnosisId);
   const details = await Promise.all(completed.map((item) => getHistoryDetail(item.id)));
   return details
-      .filter((detail) => Boolean(detail.diagnosisId))
-      .map(toReportItem)
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    .filter((detail) => Boolean(detail.diagnosisId))
+    .map(toReportItem)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+export async function getMyReportById(reportId: string): Promise<MyReportItem | null> {
+  const list = await listMyReports();
+  return list.find((item) => String(item.reportId) === String(reportId)) ?? null;
+}
+
+export async function getReportStatusMapForHistoryIds(historyIds: string[]): Promise<Record<string, ReportStatus>> {
+  const details = await Promise.all(
+    historyIds.map(async (historyId) => {
+      try {
+        const detail = await getHistoryDetail(historyId);
+        return [historyId, statusFromHistory(detail)] as const;
+      } catch {
+        return [historyId, "NONE"] as const;
+      }
+    })
+  );
+
+  return Object.fromEntries(details);
 }
 
 export async function generateReport(diagnosisId: string | number): Promise<void> {
@@ -53,7 +73,10 @@ export async function getPdfUrl(diagnosisId: string | number): Promise<string> {
   return String(res.data?.data ?? res.data);
 }
 
-// ★★★ 이게 브라우저에서 PDF 바로 열기 ★★★
+export async function downloadReport(diagnosisId: string | number): Promise<string> {
+  return getPdfUrl(diagnosisId);
+}
+
 export async function openReportPdf(diagnosisId: string | number): Promise<void> {
   const url = await getPdfUrl(diagnosisId);
   await Linking.openURL(url);

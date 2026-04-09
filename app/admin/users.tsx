@@ -28,7 +28,20 @@ export default function AdminUsersPage() {
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     if (!q) return users;
-    return users.filter((item) => item.name.toLowerCase().includes(q) || (item.address ?? "").toLowerCase().includes(q) || String(item.id).includes(q));
+    return users.filter((item) => {
+      return [
+        item.username,
+        item.email,
+        item.phoneNumber,
+        item.address,
+        item.residenceType,
+        item.rentType,
+        item.role,
+        String(item.id),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
   }, [users, keyword]);
 
   if (loading) return <ScreenState loading />;
@@ -36,16 +49,24 @@ export default function AdminUsersPage() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
       <Text style={{ fontSize: 22, fontWeight: "800" }}>사용자 조회</Text>
-      <TextInput value={keyword} onChangeText={setKeyword} placeholder="이름/주소/회원 ID 검색" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+
+      <TextInput
+        value={keyword}
+        onChangeText={setKeyword}
+        placeholder="이름/아이디/이메일/전화번호/주소/회원 ID로 검색"
+        style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
+      />
 
       {filtered.length === 0 ? (
         <View style={{ borderWidth: 1, borderRadius: 12, padding: 14 }}><Text style={{ opacity: 0.75 }}>조회된 사용자가 없습니다.</Text></View>
       ) : (
         filtered.map((user) => (
           <Pressable key={user.id} onPress={() => router.push({ pathname: "/admin/users/[userId]", params: { userId: String(user.id) } })} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
-            <Text style={{ fontWeight: "800" }}>{user.name}</Text>
+            <Text style={{ fontWeight: "800" }}>{user.username || `회원 ${user.id}`}</Text>
             <Text>회원 ID: {user.id}</Text>
-            <Text>{user.address || "주소 정보 없음"}</Text>
+            <Text>이메일: {user.email || "-"}</Text>
+            <Text>전화번호: {user.phoneNumber || "-"}</Text>
+            <Text>주소: {user.address || "-"}</Text>
           </Pressable>
         ))
       )}

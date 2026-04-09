@@ -3,25 +3,35 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export type ReportDraft = {
   repairMethod: "DIY" | "PRO" | "";
   repairDate: string;
+  repairSummary: string;
+  notes: string;
+  beforeImageUris: string[];
+  afterImageUris: string[];
+  diyMaterialsUsed: string;
+  diyMaterialCost: string;
+  diyWorkMemo: string;
   contractorName: string;
   contractorContact: string;
-  repairSummary: string;
   materialCost: string;
   laborCost: string;
   totalCost: string;
-  notes: string;
 };
 
 const EMPTY_DRAFT: ReportDraft = {
   repairMethod: "",
   repairDate: "",
+  repairSummary: "",
+  notes: "",
+  beforeImageUris: [],
+  afterImageUris: [],
+  diyMaterialsUsed: "",
+  diyMaterialCost: "",
+  diyWorkMemo: "",
   contractorName: "",
   contractorContact: "",
-  repairSummary: "",
   materialCost: "",
   laborCost: "",
   totalCost: "",
-  notes: "",
 };
 
 function keyOf(reportId: string) {
