@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getAccessToken, clearAccessToken } from "../store/tokenStorage";
+import { router } from "expo-router";
 
 const baseURL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -19,23 +20,21 @@ apiClient.interceptors.request.use(
                 (config.headers as any).Authorization = `Bearer ${token}`;
             }
 
-            // FormData일 경우 Content-Type 제거 (axios가 자동으로 multipart 설정)
+            // FormData일 경우 Content-Type 제거
             if (config.data instanceof FormData) {
-                console.log("📦 FormData 업로드 요청");
                 delete (config.headers as any)["Content-Type"];
             }
 
-            // @ts-ignore
-            console.log("📡 요청 URL:", config.baseURL + config.url);
+            const fullUrl = `${config.baseURL ?? ""}${config.url ?? ""}`;
+            console.log("📡 요청 URL:", fullUrl);
+
         } catch (e) {
             console.log("토큰 가져오기 실패");
         }
 
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
 // 응답 인터셉터
@@ -45,14 +44,18 @@ apiClient.interceptors.response.use(
         return response;
     },
     async (error) => {
-        console.log("❌ 응답 실패:", error?.response?.status);
-        console.log(error?.response?.data);
-
         const status = error?.response?.status;
+
+        console.log("❌ 응답 실패:", status);
+        console.log(error?.response?.data);
 
         if (status === 401) {
             console.log("토큰 만료 → 로그아웃 처리");
+
             await clearAccessToken();
+
+            // 🔥 로그인 페이지로 이동 (중요 기능)
+            router.replace("/login");
         }
 
         return Promise.reject(error);
