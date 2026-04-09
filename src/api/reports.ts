@@ -1,4 +1,5 @@
 import { Linking } from "react-native";
+<<<<<<< HEAD
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
@@ -10,6 +11,10 @@ import {
   type IssueType,
   type Recommendation
 } from "./histories";
+=======
+import { apiClient } from "./apiClient";
+import { getHistoryDetail, listHistories, type HistoryDetail, type IssueType, type Recommendation } from "./histories";
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
 
 export type ReportStatus = "NONE" | "GENERATING" | "READY" | "FAILED";
 
@@ -45,6 +50,7 @@ function toReportItem(history: HistoryDetail): MyReportItem {
 
 export async function listMyReports(): Promise<MyReportItem[]> {
   const histories = await listHistories();
+<<<<<<< HEAD
   const completed = histories.filter(
       (item) => item.status !== "ANALYZING" || item.diagnosisId
   );
@@ -53,6 +59,10 @@ export async function listMyReports(): Promise<MyReportItem[]> {
       completed.map((item) => getHistoryDetail(item.id))
   );
 
+=======
+  const completed = histories.filter((item) => item.status !== "ANALYZING" || item.diagnosisId);
+  const details = await Promise.all(completed.map((item) => getHistoryDetail(item.id)));
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
   return details
       .filter((detail) => Boolean(detail.diagnosisId))
       .map(toReportItem)
@@ -68,6 +78,7 @@ export async function getPdfUrl(diagnosisId: string | number): Promise<string> {
   return String(res.data?.data ?? res.data);
 }
 
+<<<<<<< HEAD
 export async function openReportPdf(diagnosisId: string | number): Promise<void> {
   const url = await getPdfUrl(diagnosisId);
   await Linking.openURL(url);
@@ -111,4 +122,10 @@ export async function saveReportDraft(
     }
 ): Promise<void> {
   await apiClient.put(`/api/reports/diagnosis/${diagnosisId}/draft`, data);
+=======
+// ★★★ 이게 브라우저에서 PDF 바로 열기 ★★★
+export async function openReportPdf(diagnosisId: string | number): Promise<void> {
+  const url = await getPdfUrl(diagnosisId);
+  await Linking.openURL(url);
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
 }

@@ -50,6 +50,7 @@ export default function MyPage() {
   const [editAddress, setEditAddress] = useState("");
 
   async function reload() {
+<<<<<<< HEAD
     try {
       setLoading(true);
 
@@ -75,15 +76,42 @@ export default function MyPage() {
       setLoading(false);
     }
   }
+=======
+  try {
+    setLoading(true);
+
+    const [meData, reportData] = await Promise.all([getMe(), listMyReports()]);
+
+    setMe(meData);
+    setReports(reportData);
+
+    setEditResidenceType(meData.residenceType);
+    setEditRentType(meData.rentType);
+    setEditPhoneNumber(meData.phoneNumber ?? "");
+    setEditAddress(meData.address ?? "");
+  } catch (e) {
+    console.log("마이페이지 불러오기 실패:", e);
+    setMe(null);
+    setReports([]);
+    Alert.alert("불러오기 실패", "서버 상태를 확인해주세요.");
+  } finally {
+    setLoading(false);
+  }
+}
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
 
   useEffect(() => {
     reload();
   }, []);
 
+<<<<<<< HEAD
   const sortedReports = useMemo(
       () => [...reports].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
       [reports]
   );
+=======
+  const sortedReports = useMemo(() => [...reports].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)), [reports]);
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
 
   async function handleSaveProfile() {
     try {
@@ -93,6 +121,7 @@ export default function MyPage() {
         phoneNumber: editPhoneNumber,
         address: editAddress,
       });
+<<<<<<< HEAD
 
       setMe(updated);
 
@@ -115,29 +144,48 @@ export default function MyPage() {
       }
 
       alert("수정 실패");
+=======
+      setMe(updated);
+      setEditOpen(false);
+      alert("내 정보가 수정되었습니다.");
+    } catch {
+      alert("프로필 수정 API를 확인해주세요.");
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
     }
   }
 
   async function handleGenerate(report: MyReportItem) {
     try {
       await generateReport(report.diagnosisId);
+<<<<<<< HEAD
       alert("PDF 생성 완료");
       await reload();
     } catch (e) {
       console.log(e);
       alert("PDF 생성 실패");
+=======
+      alert("PDF 생성 요청이 완료되었습니다.");
+      await reload();
+    } catch {
+      alert("리포트 생성 API를 확인해주세요.");
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
     }
   }
 
   async function handleDownload(report: MyReportItem) {
     try {
       await openReportPdf(report.diagnosisId);
+<<<<<<< HEAD
     } catch (e) {
       console.log(e);
+=======
+    } catch {
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
       alert("PDF 다운로드 실패");
     }
   }
 
+<<<<<<< HEAD
   if (loading) return <ScreenState loading />;
 
   return (
@@ -226,3 +274,104 @@ export default function MyPage() {
       </ScrollView>
   );
 }
+=======
+  if (loading) {
+    return <ScreenState loading />;
+  }
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
+      <Text style={{ fontSize: 22, fontWeight: "800" }}>마이페이지</Text>
+
+      <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 }}>
+        <Text style={{ fontSize: 16, fontWeight: "800" }}>내 정보</Text>
+        {me ? (
+          <>
+            <Text>아이디: {me.username}</Text>
+            <Text>휴대폰 번호: {me.phoneNumber || "-"}</Text>
+            <Text>거주 유형: {residenceLabel(me.residenceType)}</Text>
+            <Text>임대 유형: {rentLabel(me.rentType)}</Text>
+            <Text>주소: {me.address || "-"}</Text>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <Pressable onPress={() => setEditOpen((v) => !v)} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
+                <Text>{editOpen ? "수정 닫기" : "정보 수정"}</Text>
+              </Pressable>
+
+              <Pressable onPress={async () => { await clearAccessToken(); router.replace("/login"); }} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
+                <Text>로그아웃</Text>
+              </Pressable>
+            </View>
+
+            {editOpen && (
+              <View style={{ marginTop: 12, gap: 10, paddingTop: 12, borderTopWidth: 1 }}>
+                <Text style={{ fontWeight: "700" }}>거주 유형</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {(["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE", "ETC"] as ResidenceType[]).map((t) => (
+                    <Pressable key={t} onPress={() => setEditResidenceType(t)} style={{ paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, opacity: editResidenceType === t ? 1 : 0.6 }}>
+                      <Text>{residenceLabel(t)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={{ fontWeight: "700" }}>임대 유형</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {(["NONE", "MONTHLY", "JEONSE", "SALE"] as RentType[]).map((t) => (
+                    <Pressable key={t} onPress={() => setEditRentType(t)} style={{ paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, opacity: editRentType === t ? 1 : 0.6 }}>
+                      <Text>{rentLabel(t)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={{ fontWeight: "700" }}>휴대폰 번호</Text>
+                <TextInput value={editPhoneNumber} onChangeText={setEditPhoneNumber} placeholder="예) 01012345678" keyboardType="phone-pad" style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+
+                <Text style={{ fontWeight: "700" }}>주소</Text>
+                <TextInput value={editAddress} onChangeText={setEditAddress} placeholder="예) 서울시 강남구 ..." style={{ borderWidth: 1, borderRadius: 10, padding: 12 }} />
+
+                <Pressable onPress={handleSaveProfile} style={{ paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
+                  <Text>저장</Text>
+                </Pressable>
+              </View>
+            )}
+          </>
+        ) : (
+          <Text style={{ opacity: 0.7 }}>내 정보를 불러오지 못했습니다.</Text>
+        )}
+      </View>
+
+      <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 10 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontSize: 16, fontWeight: "800" }}>리포트 내역</Text>
+          <Pressable onPress={reload}><Text style={{ textDecorationLine: "underline", opacity: 0.8 }}>새로고침</Text></Pressable>
+        </View>
+
+        {sortedReports.length === 0 ? (
+          <Text style={{ opacity: 0.7 }}>리포트가 아직 없습니다.</Text>
+        ) : (
+          sortedReports.map((r) => {
+            const isReady = r.status === "READY";
+            return (
+              <Pressable key={r.reportId} onPress={() => router.push({ pathname: "/report/[reportId]", params: { reportId: String(r.reportId) } })} style={{ borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 }}>
+                <Text style={{ fontWeight: "700" }}>{new Date(r.createdAt).toISOString().slice(0, 10)} · {issueLabel(r.issueType)}</Text>
+                <Text>위험도: {r.riskScore}%</Text>
+                <Text>추천: {r.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>
+                <Text>상태: {r.status}</Text>
+
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                  <Pressable onPress={() => handleGenerate(r)} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center" }}>
+                    <Text>PDF 생성 요청</Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleDownload(r)} disabled={!isReady} style={{ flex: 1, paddingVertical: 12, borderWidth: 1, borderRadius: 10, alignItems: "center", opacity: isReady ? 1 : 0.4 }}>
+                    <Text>PDF 다운로드</Text>
+                  </Pressable>
+                </View>
+              </Pressable>
+            );
+          })
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+>>>>>>> 1c8c8976d4278c94c4dac651247331cc944e0c37
