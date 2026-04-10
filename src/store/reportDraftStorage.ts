@@ -48,6 +48,20 @@ export async function loadReportDraft(reportId: string): Promise<ReportDraft> {
   }
 }
 
-export async function saveReportDraft(reportId: string, draft: ReportDraft) {
+export async function saveReportDraft(reportId: string, draft: {
+    repairMethod: "DIY" | "PRO" | "";
+    repairDate: string;
+    contractorName: string;
+    contractorContact: string;
+    repairSummary: string;
+    actualCostKrw: number;
+    notes: string;
+    materialCost: string;
+    laborCost: string;
+    totalCost: string;
+    diyMaterialsUsed: string;
+    diyMaterialCost: string;
+    diyWorkMemo: string
+}) {
   await AsyncStorage.setItem(keyOf(reportId), JSON.stringify(draft));
 }
