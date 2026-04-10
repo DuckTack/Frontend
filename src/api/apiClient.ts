@@ -8,6 +8,8 @@ export const apiClient = axios.create({
     baseURL,
     timeout: 10000,
 });
+console.log("🔥 API baseURL:", process.env.EXPO_PUBLIC_API_BASE_URL);
+
 
 // 요청 인터셉터
 apiClient.interceptors.request.use(
@@ -31,6 +33,8 @@ apiClient.interceptors.request.use(
         } catch (e) {
             console.log("토큰 가져오기 실패");
         }
+        // @ts-ignore
+        console.log("🔥 요청 URL:", config.baseURL + config.url);
 
         return config;
     },
