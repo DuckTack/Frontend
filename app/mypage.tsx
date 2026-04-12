@@ -42,7 +42,11 @@ export default function MyPage() {
     const [loading, setLoading] = useState(true);
     const [me, setMe] = useState<Me | null>(null);
     const [reports, setReports] = useState<MyReportItem[]>([]);
-
+    const [editOpen, setEditOpen] = useState(false);
+    const [editPhoneNumber, setEditPhoneNumber] = useState("");
+    const [editAddress, setEditAddress] = useState("");
+    const [editResidenceType, setEditResidenceType] = useState<ResidenceType>("ONE_ROOM");
+    const [editRentType, setEditRentType] = useState<RentType>("NONE");
     async function reload() {
         try {
             setLoading(true);
@@ -54,6 +58,9 @@ export default function MyPage() {
 
             setMe(meData);
             setReports(reportData);
+            setEditResidenceType(meData.residenceType);
+            setEditRentType(meData.rentType);
+            setEditAddress(meData.address ?? "");
 
         } catch (e) {
             console.log("마이페이지 불러오기 실패:", e);
@@ -94,6 +101,21 @@ export default function MyPage() {
 
     if (loading) return <ScreenState loading />;
 
+    async function handleSaveProfile() {
+        try {
+            const updated = await updateMe({
+                residenceType: editResidenceType,
+                rentType: editRentType,
+                address: editAddress,
+            });
+            setMe(updated);
+            setEditOpen(false);
+            Alert.alert("수정 완료");
+        } catch {
+            Alert.alert("수정 실패");
+        }
+    }
+
     return (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
             <Text style={{ fontSize: 22, fontWeight: "800" }}>마이페이지</Text>
@@ -102,9 +124,29 @@ export default function MyPage() {
             <View style={{ borderWidth: 1, borderRadius: 12, padding: 14 }}>
                 <Text>아이디: {me?.username}</Text>
                 <Text>전화번호: {me?.phoneNumber}</Text>
+                {editOpen && (
+                    <View style={{ marginTop: 10, gap: 8 }}>
+                        <Text>거주 유형</Text>
+                        <Text>{residenceLabel(editResidenceType)}</Text>
 
-                <Pressable onPress={() => Alert.alert("정보 수정 기능 연결 필요")}>
-                    <Text>정보 수정</Text>
+                        <Text>임대 유형</Text>
+                        <Text>{rentLabel(editRentType)}</Text>
+
+                        <Text>주소</Text>
+                        <TextInput
+                            value={editAddress}
+                            onChangeText={setEditAddress}
+                            style={{ borderWidth: 1, padding: 10 }}
+                        />
+
+                        <Pressable onPress={handleSaveProfile} style={{ padding: 10, borderWidth: 1 }}>
+                            <Text>저장</Text>
+                        </Pressable>
+                    </View>
+                )}
+
+                <Pressable onPress={() => setEditOpen(v => !v)}>
+                    <Text>{editOpen ? "닫기" : "정보 수정"}</Text>
                 </Pressable>
 
                 <Pressable onPress={async () => {
