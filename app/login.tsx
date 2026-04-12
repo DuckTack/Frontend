@@ -11,25 +11,32 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleLogin() {
-    if (!username || !password) {
-      Alert.alert("입력 필요", "아이디와 비밀번호를 입력해주세요.");
-      return;
-    }
+    async function handleLogin() {
+        if (!username || !password) {
+            Alert.alert("입력 필요", "아이디와 비밀번호를 입력해주세요.");
+            return;
+        }
 
-    try {
-      setIsSubmitting(true);
-      const data = await login({ username, password });
-      await saveAccessToken(data.accessToken);
-      const isAdmin = await detectAdmin();
-      await saveIsAdmin(isAdmin);
-      router.replace("/(tabs)?intro=1");
-    } catch {
-      Alert.alert("로그인 실패", "아이디/비밀번호 또는 서버 상태를 확인해주세요.");
-    } finally {
-      setIsSubmitting(false);
+        try {
+            setIsSubmitting(true);
+
+            const data = await login({
+                username: username.trim(),
+                password: password.trim(),   // 🔥 핵심
+            });
+
+            await saveAccessToken(data.accessToken);
+
+            const isAdmin = await detectAdmin();
+            await saveIsAdmin(isAdmin);
+
+            router.replace("/(tabs)?intro=1");
+        } catch {
+            Alert.alert("로그인 실패", "아이디/비밀번호 또는 서버 상태를 확인해주세요.");
+        } finally {
+            setIsSubmitting(false);
+        }
     }
-  }
 
   async function handleDevLogin() {
     await saveDevToken();

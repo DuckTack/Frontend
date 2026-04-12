@@ -123,11 +123,17 @@ export async function verifyPasswordResetCode(email: string, code: string): Prom
   return pickBooleanFlag(res.data, "verified");
 }
 
-export async function resetPassword(req: ResetPasswordRequest): Promise<void> {
+export async function resetPassword(req: {
+  username: string;
+  email: string;
+  code: string;
+  newPassword: string
+}): Promise<void> {
   await apiClient.post("/api/auth/password/reset", {
+    username: req.username.trim(),   // 🔥 추가
     email: req.email.trim().toLowerCase(),
     code: req.code.trim(),
-    newPassword: req.newPassword,
+    newPassword: req.newPassword.trim(), // 🔥 trim도 추가
   });
 }
 
@@ -139,11 +145,14 @@ export async function signup(req: SignupRequest): Promise<void> {
   await apiClient.post("/api/auth/signup", {
     username: req.username.trim(),
     email: req.email.trim().toLowerCase(),
-    password: req.password,
+    password: req.password.trim(),
     phoneNumber: req.phoneNumber.replace(/[^0-9]/g, ""),
     residenceType: req.residenceType,
     rentType: req.rentType,
     address: req.address?.trim() || "",
     emailVerified: true,
+    termsAgreed: true,        // 🔥 추가
+    privacyAgreed: true,      // 🔥 추가
+    marketingAgreed: false,   // 🔥 선택값
   });
 }

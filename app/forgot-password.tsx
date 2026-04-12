@@ -61,8 +61,13 @@ export default function ForgotPasswordPage() {
       setVerifyingCode(false);
     }
   }
+  const [username, setUsername] = useState("");
 
   async function handleResetPassword() {
+    if (!username.trim()) {
+      Alert.alert("입력 필요", "아이디를 입력해주세요.");
+      return;
+    }
     if (!normalizedEmail) {
       Alert.alert("입력 필요", "이메일을 입력해주세요.");
       return;
@@ -87,9 +92,10 @@ export default function ForgotPasswordPage() {
     try {
       setResetting(true);
       await resetPassword({
+        username: username.trim(),   // 🔥 추가
         email: normalizedEmail,
         code: verificationCode.trim(),
-        newPassword,
+          newPassword: newPassword.trim(),   // 🔥 이거 추가
       });
       Alert.alert("재설정 완료", "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.");
       router.replace("/login");
@@ -103,7 +109,13 @@ export default function ForgotPasswordPage() {
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20, gap: 12 }}>
       <Text style={{ fontSize: 26, fontWeight: "700", textAlign: "center" }}>비밀번호 재설정</Text>
-
+        <TextInput
+            value={username}
+            onChangeText={setUsername}
+            placeholder="아이디"
+            autoCapitalize="none"
+            style={{ borderWidth: 1, borderRadius: 10, padding: 12 }}
+        />
       <TextInput
         value={email}
         onChangeText={(value) => {
