@@ -28,9 +28,9 @@ export default function Histories() {
     try {
       setLoading(true);
       const data = await listHistories();
-      setItems(data);
+      setItems(data || []);
 
-      const ids = data.map((d) => getHistoryId(d)).filter(Boolean);
+      const ids = (data || []).map((d) => getHistoryId(d)).filter(Boolean);
       if (ids.length > 0) {
         const map = await getReportStatusMapForHistoryIds(ids);
         setReportStatus(map);
@@ -56,17 +56,19 @@ export default function Histories() {
         style: "destructive",
         onPress: async () => {
           try {
+            // ✅ 삭제 즉시 화면에서 제거 (상태 업데이트)
+            setItems((prev) => prev.filter((it) => getHistoryId(it) !== id));
+            // 서버에 실제 삭제 요청
             await deleteHistory(id);
-            await fetchList(); 
           } catch {
             Alert.alert("삭제 실패", "다시 시도해주세요.");
+            fetchList(); // 실패했을 때만 다시 목록 불러오기
           }
         },
       },
     ]);
   }
 
-  // [수정] 7가지 항목 라벨링
   const issueLabel = (t: IssueType) => {
     switch (t) {
       case "CRACK": return "균열";
@@ -79,7 +81,6 @@ export default function Histories() {
     }
   };
 
-  // [수정] 아이콘 및 배경색 확장
   const getIssueIcon = (t: IssueType) => {
     switch (t) {
       case "LEAK": return { emoji: "💧", color: "#eff6ff" };
@@ -109,7 +110,6 @@ export default function Histories() {
         <Text style={styles.headerSub}>우리 집 안전 기록을 한눈에 확인하세요</Text>
       </View>
 
-      {/* [수정] 필터 항목 업데이트 */}
       <View style={styles.filterWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           {["전체", "균열", "누수", "곰팡이", "파손", "전기", "가스", "기타"].map((filter) => (
@@ -164,7 +164,8 @@ export default function Histories() {
                       <View style={styles.cardFooterRow}>
                         <View style={styles.footerLeft}>
                           <Feather name="calendar" size={12} color="#94a3b8" />
-                          <Text style={styles.cardDateText}>{it.createdAt.split(' ')[0]}</Text>
+                          {/* ✅ split 제거: 날짜 정보가 없어도 에러가 발생하지 않습니다. */}
+                          <Text style={styles.cardDateText}>{it.createdAt || ""}</Text>
                         </View>
                         <Text style={[styles.statusText, { color: status === "READY" ? "#10b981" : status === "GENERATING" ? "#3b82f6" : "#94a3b8" }]}>
                           {status === "READY" ? "리포트 완료" : status === "GENERATING" ? "분석 중" : "분석 대기"}
