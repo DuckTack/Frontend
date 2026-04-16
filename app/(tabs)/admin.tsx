@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View, StyleSheet, Platform } from "react-native";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 // [원본 로직 및 경로 유지]
@@ -15,25 +16,27 @@ export default function AdminHome() {
   const [userCount, setUserCount] = useState(0);
   const [companyCount, setCompanyCount] = useState(0);
 
-  // [원본 기능: 권한 체크 및 데이터 로딩 로직 보존]
-  useEffect(() => {
-    async function load() {
-      const allowed = await ensureAdminOrRedirect();
-      if (!allowed) return;
-      try {
-        setLoading(true);
-        const [users, companies] = await Promise.all([
-          listAdminUsers().catch(() => []),
-          listAdminCompanies().catch(() => []),
-        ]);
-        setUserCount(users.length);
-        setCompanyCount(companies.length);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    const allowed = await ensureAdminOrRedirect();
+    if (!allowed) return;
+    try {
+      setLoading(true);
+      const [users, companies] = await Promise.all([
+        listAdminUsers().catch(() => []),
+        listAdminCompanies().catch(() => []),
+      ]);
+      setUserCount(users.length);
+      setCompanyCount(companies.length);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   if (loading) return <ScreenState loading />;
 

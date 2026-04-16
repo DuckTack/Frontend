@@ -75,7 +75,6 @@ export default function Signup() {
     router.replace("/signup-consent");
   }, [consent]);
 
-  // 핸들러들은 원본 로직 그대로 유지됩니다.
   const handleCheckUsername = async () => {
     if (!username.trim()) return Alert.alert("입력 필요", "아이디를 입력해주세요.");
     try {
@@ -225,27 +224,44 @@ export default function Signup() {
               </Pressable>
             </View>
             
-            {emailChecked === true && !emailVerified && (
-              <Pressable style={styles.fullWidthBtn} onPress={handleSendEmailCode}>
-                <Text style={styles.fullWidthBtnText}>{emailCodeSent ? "인증코드 재발송" : "인증코드 발송"}</Text>
-              </Pressable>
-            )}
+            {/* [수정] 버튼을 조건부 렌더링이 아닌 '활성화/비활성화' 방식으로 변경하여 영역 고정 */}
+            <Pressable 
+              style={[
+                styles.fullWidthBtn, 
+                (!emailChecked || emailVerified) && { backgroundColor: '#e2e8f0' } 
+              ]} 
+              onPress={handleSendEmailCode}
+              disabled={!emailChecked || emailVerified}
+            >
+              <Text style={[styles.fullWidthBtnText, (!emailChecked || emailVerified) && { color: '#94a3b8' }]}>
+                {emailVerified ? "이메일 인증 완료" : (emailCodeSent ? "인증코드 재발송" : "인증코드 발송")}
+              </Text>
+            </Pressable>
 
-            {emailCodeSent && !emailVerified && (
-              <View style={[styles.row, { marginTop: 10 }]}>
-                <TextInput
-                  style={styles.flexInput}
-                  placeholder="인증코드 6자리 입력"
-                  value={verificationCode}
-                  onChangeText={setVerificationCode}
-                  keyboardType="number-pad"
-                />
-                <Pressable style={[styles.inlineButton, {backgroundColor: MAIN_BLUE}]} onPress={handleVerifyEmail}>
-                  <Text style={[styles.inlineButtonText, {color: '#fff'}]}>인증하기</Text>
-                </Pressable>
-              </View>
-            )}
+            {/* [수정] 인증코드 입력란을 항상 노출하되, 발송 전까지는 비활성화 처리 */}
+            <View style={[styles.row, { marginTop: 10 }]}>
+              <TextInput
+                style={[styles.flexInput, (!emailCodeSent || emailVerified) && { backgroundColor: '#f1f5f9', color: '#94a3b8' }]}
+                placeholder="인증코드 6자리 입력"
+                value={verificationCode}
+                onChangeText={setVerificationCode}
+                keyboardType="number-pad"
+                editable={emailCodeSent && !emailVerified} // 발송 전이거나 완료 후엔 편집 불가
+              />
+              <Pressable 
+                style={[
+                  styles.inlineButton, 
+                  { backgroundColor: (emailCodeSent && !emailVerified) ? MAIN_BLUE : '#e2e8f0' }
+                ]} 
+                onPress={handleVerifyEmail}
+                disabled={!emailCodeSent || emailVerified}
+              >
+                <Text style={[styles.inlineButtonText, { color: (emailCodeSent && !emailVerified) ? '#fff' : '#94a3b8' }]}>인증하기</Text>
+              </Pressable>
+            </View>
+
             {emailVerified && <Text style={[styles.statusText, {color: "#10b981"}]}>✓ 이메일 인증이 완료되었습니다.</Text>}
+            {emailCodeSent && !emailVerified && <Text style={[styles.statusText, {color: MAIN_BLUE}]}>ⓘ 메일로 전송된 코드를 입력해 주세요.</Text>}
           </View>
 
           {/* 비밀번호 (일치 확인 기능 포함) */}
@@ -275,7 +291,6 @@ export default function Signup() {
                 <Ionicons name={showConfirm ? "eye-off" : "eye"} size={20} color="#94a3b8" />
               </Pressable>
             </View>
-            {/* 🔥 비밀번호 일치 텍스트 로직 복구 */}
             {passwordConfirm !== "" && (
               <Text style={[styles.statusText, { color: password === passwordConfirm ? "#10b981" : "#ef4444" }]}>
                 {password === passwordConfirm ? "✓ 비밀번호가 일치합니다." : "✕ 비밀번호가 일치하지 않습니다."}
@@ -315,7 +330,7 @@ export default function Signup() {
             </View>
           </View>
 
-          {/* 주소 (찌그러짐 방지 스타일 적용) */}
+          {/* 주소 */}
           <View style={styles.section}>
             <Text style={styles.label}>주소 (선택)</Text>
             <TextInput
@@ -378,6 +393,5 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, gap: 8, marginBottom: 20 },
   footerText: { color: '#64748b', fontSize: 14 },
   footerLink: { color: MAIN_BLUE, fontWeight: '700', fontSize: 14, textDecorationLine: 'underline' },
-  // 주소창 전용 스타일 (찌그러짐 방지)
   addressInput: { height: 56, backgroundColor: "#f8fafc", borderRadius: 16, paddingHorizontal: 16, borderWidth: 1, borderColor: "#e2e8f0", fontSize: 15, width: '100%' },
 });
