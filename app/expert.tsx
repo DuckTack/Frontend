@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Platform } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather, MaterialCommunityIcons, FontAwesome } from "@expo/vector-icons";
 
 // [원본 로직 및 컴포넌트 유지]
 import ScreenState from "../src/components/ScreenState";
 import { getHistoryDetail, IssueType } from "../src/api/histories";
 import { getExpertInfo, ExpertInfo } from "../src/api/guides";
-import { listExpertVendors, type ExpertVendor, type ExpertVendorSort, VENDOR_REGIONS } from "../src/api/experts";
-import { calculateDistanceKm, formatDistanceKm, requestCurrentCoordinates, type Coordinates } from "../src/utils/location";
+import { listExpertVendors, listNearbyCompanies, type ExpertVendor, type ExpertVendorSort, VENDOR_REGIONS } from "../src/api/experts";
+import { requestCurrentCoordinates, type Coordinates } from "../src/utils/location";
 
 const MAIN_BLUE = "#3b82f6";
 
@@ -19,24 +20,49 @@ function issueTypeLabel(t: IssueType) {
   return labels[t] || "기타";
 }
 
-function formatPrice(price: number) {
+function formatPrice(price: number, maxPrice?: number) {
+  if (maxPrice && maxPrice > price) {
+    return `${price.toLocaleString()}원~${maxPrice.toLocaleString()}원`;
+  }
   return `${price.toLocaleString()}원~`;
 }
 
-// [원본 기능: 거리 계산 헬퍼]
-function withDistance(vendors: ExpertVendor[], coords: Coordinates | null) {
-  return vendors.map((vendor) => {
-    if (!coords || vendor.latitude == null || vendor.longitude == null) {
-      return { ...vendor, distanceKm: undefined as number | undefined };
-    }
+function formatDistanceKm(distanceKm?: number | null) {
+  if (distanceKm == null || Number.isNaN(distanceKm)) return "거리 정보 없음";
+  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)}m`;
+  return `${distanceKm.toFixed(1)}km`;
+}
+
+function mergeVendorsWithNearby(baseVendors: ExpertVendor[], nearbyVendors: ExpertVendor[]) {
+  if (nearbyVendors.length === 0) return baseVendors;
+
+  const baseById = new Map(baseVendors.map((vendor) => [String(vendor.id), vendor]));
+  const baseByName = new Map(baseVendors.map((vendor) => [vendor.name, vendor]));
+  const nearbyIds = new Set<string>();
+
+  const merged = baseVendors.map((vendor) => {
+    const nearby = nearbyVendors.find((item) => String(item.id) === String(vendor.id) || item.name === vendor.name);
+    if (!nearby) return vendor;
+    nearbyIds.add(String(nearby.id));
     return {
       ...vendor,
-      distanceKm: calculateDistanceKm(coords, {
-        latitude: vendor.latitude,
-        longitude: vendor.longitude,
-      }),
+      distanceKm: nearby.distanceKm,
+      minPrice: nearby.minPrice || vendor.minPrice,
+      maxPrice: nearby.maxPrice ?? vendor.maxPrice,
+      addressLine: nearby.addressLine ?? vendor.addressLine,
+      phone: nearby.phone ?? vendor.phone,
+      serviceRegionLabel: nearby.serviceRegionLabel ?? vendor.serviceRegionLabel,
     };
   });
+
+  nearbyVendors.forEach((vendor) => {
+    const byId = baseById.get(String(vendor.id));
+    const byName = baseByName.get(vendor.name);
+    if (byId || byName || nearbyIds.has(String(vendor.id))) return;
+    merged.push(vendor);
+  });
+
+  return merged;
 }
 
 export default function Expert() {
@@ -80,7 +106,10 @@ export default function Expert() {
       setRequestingLocation(true);
       const coords = await requestCurrentCoordinates();
       setUserCoordinates(coords);
-      Alert.alert("위치 확인 완료", "이제 업체 목록에서 내 위치 기준 거리를 볼 수 있습니다.");
+      if (selectedRegion) {
+        await loadVendors(selectedRegion, sortKey, sortAscending);
+      }
+      Alert.alert("위치 확인 완료", "가까운 업체 순 거리 정보가 업데이트되었습니다.");
     } catch (error: any) {
       const message = String(error?.message ?? "");
       if (message === "LOCATION_SERVICE_DISABLED") {
@@ -96,23 +125,43 @@ export default function Expert() {
   }
 
   // --- [원본 업체 조회 및 정렬 로직] ---
-  async function loadVendors(region: string, nextSortKey = sortKey, nextAscending = sortAscending) {
+  const loadVendors = useCallback(async (region: string, nextSortKey = sortKey, nextAscending = sortAscending) => {
     try {
       setVendorsLoading(true);
-      const data = await listExpertVendors({
+      const baseVendors = await listExpertVendors({
         region,
         issueType: resolvedIssueType,
         sortKey: nextSortKey,
         direction: nextAscending ? "asc" : "desc",
       });
-      setVendors(data);
+
+      if (!userCoordinates) {
+        setVendors(baseVendors);
+        return;
+      }
+
+      const nearbyVendors = await listNearbyCompanies({
+        latitude: userCoordinates.latitude,
+        longitude: userCoordinates.longitude,
+        region,
+      });
+
+      setVendors(mergeVendorsWithNearby(baseVendors, nearbyVendors));
     } catch {
       setVendors([]);
       Alert.alert("조회 실패", "전문업체 API 정보를 확인해주세요.");
     } finally {
       setVendorsLoading(false);
     }
-  }
+  }, [resolvedIssueType, sortKey, sortAscending, userCoordinates]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (selectedRegion) {
+        loadVendors(selectedRegion, sortKey, sortAscending);
+      }
+    }, [selectedRegion, sortKey, sortAscending, loadVendors])
+  );
 
   const handleSortPress = (nextKey: ExpertVendorSort) => {
     const nextAscending = sortKey === nextKey ? !sortAscending : true;
@@ -123,7 +172,7 @@ export default function Expert() {
     }
   };
 
-  const vendorsWithDistance = useMemo(() => withDistance(vendors, userCoordinates), [vendors, userCoordinates]);
+  const vendorsWithDistance = useMemo(() => vendors, [vendors]);
 
   if (loading || !info) return <ScreenState loading />;
 
@@ -219,7 +268,7 @@ export default function Expert() {
         {selectedRegion ? (
           <View style={styles.vendorSection}>
             <View style={styles.listHeader}>
-              <Text style={styles.listCount}>추천 업체 {vendors.length}곳</Text>
+              <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
               <View style={styles.filterRow}>
                 <Pressable onPress={() => handleSortPress("price")}>
                   <Text style={[styles.filterText, sortKey === "price" && styles.filterActive]}>
@@ -260,7 +309,7 @@ export default function Expert() {
                         )}
                       </View>
                     </View>
-                    <Text style={styles.vendorPrice}>{formatPrice(vendor.minPrice)}</Text>
+                    <Text style={styles.vendorPrice}>{formatPrice(vendor.minPrice, vendor.maxPrice)}</Text>
                   </View>
 
                   <Text style={styles.vendorIntro} numberOfLines={2}>{vendor.intro}</Text>

@@ -81,6 +81,7 @@ export default function Result() {
   const isHighRisk = detail.riskScore >= 70;
   const isMediumRisk = detail.riskScore >= 40;
   const isDIY = detail.recommendation === "DIY";
+  const recommendedPath = isDIY ? "DIY" : "EXPERT";
   
   const severityColor = isHighRisk ? "#ef4444" : isMediumRisk ? "#f97316" : "#10b981";
   const severityBg = isHighRisk ? "#fef2f2" : isMediumRisk ? "#fff7ed" : "#f0fdf4";
@@ -208,6 +209,31 @@ export default function Result() {
           </Text>
         </Pressable>
 
+        <View style={styles.choiceSection}>
+          <Text style={styles.choiceTitle}>원하는 진행 방식을 직접 선택할 수 있어요</Text>
+          <Text style={styles.choiceDesc}>
+            현재 AI 추천은 <Text style={styles.choiceHighlight}>{recommendedPath === "DIY" ? "DIY" : "전문가"}</Text> 이지만,
+            사용자는 둘 중 원하는 경로를 직접 선택할 수 있습니다.
+          </Text>
+
+          <View style={styles.choiceButtonRow}>
+            <Pressable
+              style={[styles.choiceButton, styles.choiceButtonLeft]}
+              onPress={() => router.push({ pathname: "/diy", params: { historyId: String(detail.id) } })}
+            >
+              <MaterialCommunityIcons name="tools" size={18} color="#16a34a" />
+              <Text style={styles.choiceButtonText}>DIY 보기</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.choiceButton, styles.choiceButtonRight]}
+              onPress={() => router.push({ pathname: "/expert", params: { historyId: String(detail.id) } })}
+            >
+              <Feather name="users" size={18} color={MAIN_BLUE} />
+              <Text style={styles.choiceButtonText}>전문가 보기</Text>
+            </Pressable>
+          </View>
+        </View>
+
         <View style={{ height: 20 }} />
       </ScrollView>
     </View>
@@ -329,4 +355,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   actionBtnText: { color: "#fff", fontSize: 17, fontWeight: "800" },
+  choiceSection: { backgroundColor: "#fff", borderRadius: 20, padding: 18, borderWidth: 1, borderColor: "#e2e8f0", gap: 10 },
+  choiceTitle: { fontSize: 15, fontWeight: "800", color: "#1e293b" },
+  choiceDesc: { fontSize: 13, color: "#64748b", lineHeight: 20 },
+  choiceHighlight: { color: MAIN_BLUE, fontWeight: "800" },
+  choiceButtonRow: { flexDirection: "row", gap: 10, marginTop: 4 },
+  choiceButton: { flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: "#e2e8f0", backgroundColor: "#fff", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+  choiceButtonLeft: { backgroundColor: "#f0fdf4", borderColor: "#dcfce7" },
+  choiceButtonRight: { backgroundColor: "#eff6ff", borderColor: "#dbeafe" },
+  choiceButtonText: { fontSize: 14, fontWeight: "800", color: "#1e293b" },
 });

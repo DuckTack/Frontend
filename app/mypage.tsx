@@ -48,6 +48,9 @@ export default function MyPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [reports, setReports] = useState<MyReportItem[]>([]);
   const [editOpen, setEditOpen] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhoneNumber, setEditPhoneNumber] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editResidenceType, setEditResidenceType] = useState<ResidenceType>("ONE_ROOM");
   const [editRentType, setEditRentType] = useState<RentType>("NONE");
@@ -58,6 +61,9 @@ export default function MyPage() {
       const [meData, reportData] = await Promise.all([getMe(), listMyReports()]);
       setMe(meData);
       setReports(reportData);
+      setEditUsername(meData.username ?? "");
+      setEditEmail(meData.email ?? "");
+      setEditPhoneNumber(meData.phoneNumber ?? "");
       setEditResidenceType(meData.residenceType);
       setEditRentType(meData.rentType);
       setEditAddress(meData.address ?? "");
@@ -99,6 +105,9 @@ export default function MyPage() {
   async function handleSaveProfile() {
     try {
       const updated = await updateMe({
+        username: editUsername.trim(),
+        email: editEmail.trim(),
+        phoneNumber: editPhoneNumber.trim(),
         residenceType: editResidenceType,
         rentType: editRentType,
         address: editAddress,
@@ -134,6 +143,7 @@ export default function MyPage() {
             <View style={{ flex: 1 }}>
               <Text style={styles.userName}>{me?.username || "사용자"}</Text>
               <Text style={styles.userPhone}>{me?.phoneNumber || "번호 없음"}</Text>
+              {!!me?.email && <Text style={styles.userEmail}>{me.email}</Text>}
               <Text style={styles.userAddress} numberOfLines={1}>
                 {me?.address || "등록된 주소지가 없습니다."}
               </Text>
@@ -158,7 +168,38 @@ export default function MyPage() {
             <View style={styles.editFormContainer}>
               <View style={styles.divider} />
               
-              <Text style={styles.editLabel}>거주 유형</Text>
+              <Text style={styles.editLabel}>아이디</Text>
+              <TextInput
+                style={styles.addressInput}
+                value={editUsername}
+                onChangeText={setEditUsername}
+                placeholder="아이디를 입력해주세요"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+              />
+
+              <Text style={[styles.editLabel, { marginTop: 20 }]}>이메일</Text>
+              <TextInput
+                style={styles.addressInput}
+                value={editEmail}
+                onChangeText={setEditEmail}
+                placeholder="이메일을 입력해주세요"
+                placeholderTextColor="#94a3b8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <Text style={[styles.editLabel, { marginTop: 20 }]}>전화번호</Text>
+              <TextInput
+                style={styles.addressInput}
+                value={editPhoneNumber}
+                onChangeText={setEditPhoneNumber}
+                placeholder="전화번호를 입력해주세요"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+              />
+
+              <Text style={[styles.editLabel, { marginTop: 20 }]}>거주 유형</Text>
               <View style={styles.chipGrid}>
                 {(["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE"] as ResidenceType[]).map((t) => (
                   <Pressable key={t} onPress={() => setEditResidenceType(t)} style={[styles.chip, editResidenceType === t && styles.chipActive]}>
@@ -296,6 +337,7 @@ const styles = StyleSheet.create({
   avatar: { width: 64, height: 64, borderRadius: 22, backgroundColor: "#eff6ff", alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#dbeafe' },
   userName: { fontSize: 20, fontWeight: '800', color: '#1e293b' },
   userPhone: { fontSize: 13, color: '#64748b', marginTop: 1 },
+  userEmail: { fontSize: 12, color: '#64748b', marginTop: 2 },
   userAddress: { fontSize: 12, color: '#94a3b8', marginTop: 3 },
   
   editToggleBtn: { 
