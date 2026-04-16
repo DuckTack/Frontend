@@ -19,6 +19,14 @@ export type ExpertVendor = {
   longitude?: number;
   addressLine?: string;
   serviceRegionLabel?: string;
+  distanceKm?: number;
+  maxPrice?: number;
+};
+
+export type NearbyCompanyRequest = {
+  latitude: number;
+  longitude: number;
+  region: string;
 };
 
 function toNumberOrUndefined(value: unknown) {
@@ -33,6 +41,7 @@ function normalizeVendor(raw: any): ExpertVendor {
     name: String(raw?.name ?? ""),
     region: String(raw?.region ?? raw?.serviceRegionLabel ?? ""),
     minPrice: Number(raw?.minPrice ?? raw?.minEstimatedQuoteKrw ?? 0),
+    maxPrice: toNumberOrUndefined(raw?.maxEstimatedQuoteKrw),
     rating: Number(raw?.rating ?? 0),
     reviewCount: Number(raw?.reviewCount ?? 0),
     intro: String(raw?.intro ?? raw?.capabilityNote ?? ""),
@@ -46,11 +55,10 @@ function normalizeVendor(raw: any): ExpertVendor {
     longitude: toNumberOrUndefined(raw?.longitude ?? raw?.lng),
     addressLine: raw?.addressLine ? String(raw.addressLine) : undefined,
     serviceRegionLabel: raw?.serviceRegionLabel ? String(raw.serviceRegionLabel) : undefined,
+    distanceKm: toNumberOrUndefined(raw?.distanceKm),
   };
 }
 
-// TODO(backend): 업체 거리 계산을 프론트에서 하려면 vendor 응답에 latitude/longitude가 필요합니다.
-// 초기에는 프론트가 사용자 GPS를 받고 하버사인 거리 계산을 수행하도록 맞춰두었습니다.
 export async function listExpertVendors(params: {
   region: string;
   issueType: IssueType;
@@ -67,4 +75,29 @@ export async function listExpertVendors(params: {
   const body = res.data?.data ?? res.data;
   const list = Array.isArray(body?.content) ? body.content : Array.isArray(body) ? body : [];
   return list.map(normalizeVendor);
+}
+
+export async function listNearbyCompanies(params: NearbyCompanyRequest): Promise<ExpertVendor[]> {
+  const res = await apiClient.post("/api/companies/nearby", {
+    latitude: params.latitude,
+    longitude: params.longitude,
+    region: params.region,
+  });
+  const body = res.data?.data ?? res.data;
+  const list = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+  return list.map((item: any) => ({
+    id: String(item?.id ?? ""),
+    name: String(item?.name ?? ""),
+    region: params.region,
+    minPrice: Number(item?.minEstimatedQuoteKrw ?? 0),
+    maxPrice: toNumberOrUndefined(item?.maxEstimatedQuoteKrw),
+    rating: Number(item?.rating ?? 0),
+    reviewCount: Number(item?.reviewCount ?? 0),
+    intro: String(item?.intro ?? ""),
+    coverageAreas: [],
+    phone: item?.phone ? String(item.phone) : undefined,
+    addressLine: item?.addressLine ? String(item.addressLine) : undefined,
+    serviceRegionLabel: item?.serviceRegionLabel ? String(item.serviceRegionLabel) : params.region,
+    distanceKm: toNumberOrUndefined(item?.distanceKm),
+  }));
 }
