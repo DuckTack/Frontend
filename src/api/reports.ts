@@ -1,7 +1,7 @@
 import { Linking } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-
+import * as ImageManipulator from "expo-image-manipulator";
 import { apiClient } from "./apiClient";
 import {
     getHistoryDetail,
@@ -28,6 +28,8 @@ export type UploadedReportImage = {
     fileKey: string;
     url?: string;
 };
+
+export type ReportImageSlot = "BEFORE" | "AFTER";
 
 export type SaveReportDraftRequest = {
     repairMethod: string;
@@ -155,43 +157,98 @@ export async function downloadReport(
 }
 
 function guessMimeType(uri: string) {
-    const lower = uri.toLowerCase();
-    if (lower.endsWith(".png")) return "image/png";
-    if (lower.endsWith(".heic")) return "image/heic";
-    if (lower.endsWith(".webp")) return "image/webp";
     return "image/jpeg";
 }
 
-export async function uploadReportImages(uris: string[]): Promise<UploadedReportImage[]> {
+function mapUploadedFiles(payload: any): UploadedReportImage[] {
+    const body = payload?.data ?? payload;
+    const files = Array.isArray(body?.files)
+        ? body.files
+        : Array.isArray(body)
+            ? body
+            : [];
+
+    return files.map((file: any) => {
+        if (typeof file === "string") {
+            return {
+                fileKey: file,
+            };
+        }
+
+        return {
+            fileKey: String(file?.fileKey ?? file?.key ?? file?.id ?? ""),
+            url: file?.url ? String(file.url) : undefined,
+        };
+    });
+}
+
+export async function uploadReportImages(uris: string[]): Promise<UploadedReportImage[]>;
+export async function uploadReportImages(
+    diagnosisId: string | number,
+    uris: string[],
+    imageType: ReportImageSlot
+): Promise<UploadedReportImage[]>;
+export async function uploadReportImages(
+    diagnosisIdOrUris: string | number | string[],
+    maybeUris?: string[],
+    maybeImageType?: ReportImageSlot
+): Promise<UploadedReportImage[]> {
+    const hasDiagnosisContext = !Array.isArray(diagnosisIdOrUris);
+    const diagnosisId = hasDiagnosisContext ? diagnosisIdOrUris : undefined;
+    const uris = hasDiagnosisContext ? (maybeUris ?? []) : diagnosisIdOrUris;
+    const imageType = hasDiagnosisContext ? maybeImageType : undefined;
+
     if (uris.length === 0) return [];
 
     const formData = new FormData();
-    uris.forEach((uri, index) => {
-        const filename = uri.split("/").pop() || `report-image-${index + 1}.jpg`;
+    const processedUris = await Promise.all(
+        uris.map(async (uri) => {
+            const result = await ImageManipulator.manipulateAsync(
+                uri,
+                [],
+                {
+                    compress: 0.8,
+                    format: ImageManipulator.SaveFormat.JPEG,
+                }
+            );
+            return result.uri;
+        })
+    );
+    console.log("원본:", uris);
+    console.log("변환:", processedUris);
+
+    processedUris.forEach((uri, index) => {
+        const filename = `report-image-${index + 1}.jpg`;
         formData.append("files", {
             uri,
             name: filename,
-            type: guessMimeType(uri),
+            type: "image/jpeg",
         } as any);
     });
+
+    if (hasDiagnosisContext && diagnosisId !== undefined && imageType) {
+        const res = await apiClient.post(
+            "/api/reports/images/upload",
+            formData,
+            {
+                params: {
+                    diagnosisId: String(diagnosisId),
+                    type: imageType,
+                },
+                headers: {
+                    "Content-Type": "multipart/form-data",
+                },
+            }
+        );
+        return mapUploadedFiles(res.data);
+    }
 
     const res = await apiClient.post("/api/files/upload", formData, {
         headers: {
             "Content-Type": "multipart/form-data",
         },
     });
-
-    const body = res.data?.data ?? res.data;
-    const files = Array.isArray(body?.files)
-        ? body.files
-        : Array.isArray(body)
-          ? body
-          : [];
-
-    return files.map((file: any) => ({
-        fileKey: String(file?.fileKey ?? file?.key ?? file?.id ?? ""),
-        url: file?.url ? String(file.url) : undefined,
-    }));
+    return mapUploadedFiles(res.data);
 }
 
 export async function saveReportDraft(

@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { View, Text, Pressable, ScrollView, Alert, StyleSheet, Platform, SafeAreaView, TouchableOpacity } from "react-native";
-import { router, Stack } from "expo-router";
+import { View, Text, Pressable, ScrollView, Alert, StyleSheet, Platform } from "react-native";import { router, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
+import { SafeAreaView } from "react-native-safe-area-context";
+import { TouchableOpacity } from "react-native";
 const MAIN_BLUE = "#3b82f6";
 const BG_BLUE = "#eff6ff";
 

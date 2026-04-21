@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { View, Text, Pressable, Image, ScrollView, StyleSheet, Alert, Platform, TouchableOpacity, SafeAreaView } from "react-native";
+import { View, Text, Pressable, Image, ScrollView, StyleSheet, Alert, Platform, TouchableOpacity } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { router, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,7 +9,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { showAlert } from "../src/utils/showAlert";
 import api from "../src/api/apiClient";
 import { setPendingImages } from "../src/api/diagnosis";
-
 type PickedImage = {
   uri: string;
 };
@@ -75,6 +75,7 @@ export default function Upload() {
     router.push("/analyzing");
   }
 
+  // @ts-ignore
   return (
     // edges 설정을 통해 탭바 영역 침범 방지
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
