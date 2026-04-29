@@ -9,8 +9,12 @@ import { clearAccessToken } from "../src/store/tokenStorage";
 import { openReportPdf, generateReport, listMyReports, MyReportItem } from "../src/api/reports";
 import { getMe, updateMe, Me, ResidenceType, RentType } from "../src/api/users";
 
+// [추가] 가이드라인 컴포넌트 임포트
+import Guideline from "./guideline"; 
+
 const MAIN_BLUE = "#3b82f6";
 
+// ... (residenceLabel, rentLabel, issueLabel 함수는 기존과 동일하여 생략)
 function residenceLabel(t: ResidenceType) {
   switch (t) {
     case "ONE_ROOM": return "원룸";
@@ -54,6 +58,9 @@ export default function MyPage() {
   const [editAddress, setEditAddress] = useState("");
   const [editResidenceType, setEditResidenceType] = useState<ResidenceType>("ONE_ROOM");
   const [editRentType, setEditRentType] = useState<RentType>("NONE");
+
+  // [추가] 가이드라인 모달 상태
+  const [guideVisible, setGuideVisible] = useState(false);
 
   async function reload() {
     try {
@@ -133,13 +140,10 @@ export default function MyPage() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* [통합 프로필 카드] 상단 정보 + 수정 버튼 + 수정 폼 */}
+        {/* [통합 프로필 카드] */}
         <View style={styles.mainProfileCard}>
-          {/* 상단 섹션: 아바타와 기본 정보 */}
           <View style={styles.profileInfoRow}>
-            <View style={styles.avatar}>
-              <Text style={{ fontSize: 32 }}>👤</Text>
-            </View>
+            <View style={styles.avatar}><Text style={{ fontSize: 32 }}>👤</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.userName}>{me?.username || "사용자"}</Text>
               <Text style={styles.userPhone}>{me?.phoneNumber || "번호 없음"}</Text>
@@ -152,53 +156,20 @@ export default function MyPage() {
               onPress={() => setEditOpen(!editOpen)} 
               style={[styles.editToggleBtn, editOpen && styles.editToggleBtnActive]}
             >
-              <Ionicons 
-                name={editOpen ? "close" : "settings-outline"} 
-                size={16} 
-                color={editOpen ? "#fff" : MAIN_BLUE} 
-              />
-              <Text style={[styles.editToggleText, editOpen && { color: "#fff" }]}>
-                {editOpen ? "닫기" : "수정"}
-              </Text>
+              <Ionicons name={editOpen ? "close" : "settings-outline"} size={16} color={editOpen ? "#fff" : MAIN_BLUE} />
+              <Text style={[styles.editToggleText, editOpen && { color: "#fff" }]}>{editOpen ? "닫기" : "수정"}</Text>
             </Pressable>
           </View>
 
-          {/* 수정 폼 섹션 (editOpen이 true일 때만 슬라이드처럼 표시) */}
           {editOpen && (
             <View style={styles.editFormContainer}>
               <View style={styles.divider} />
-              
               <Text style={styles.editLabel}>아이디</Text>
-              <TextInput
-                style={styles.addressInput}
-                value={editUsername}
-                onChangeText={setEditUsername}
-                placeholder="아이디를 입력해주세요"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-              />
-
+              <TextInput style={styles.addressInput} value={editUsername} onChangeText={setEditUsername} placeholder="아이디를 입력해주세요" placeholderTextColor="#94a3b8" autoCapitalize="none" />
               <Text style={[styles.editLabel, { marginTop: 20 }]}>이메일</Text>
-              <TextInput
-                style={styles.addressInput}
-                value={editEmail}
-                onChangeText={setEditEmail}
-                placeholder="이메일을 입력해주세요"
-                placeholderTextColor="#94a3b8"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
+              <TextInput style={styles.addressInput} value={editEmail} onChangeText={setEditEmail} placeholder="이메일을 입력해주세요" placeholderTextColor="#94a3b8" keyboardType="email-address" autoCapitalize="none" />
               <Text style={[styles.editLabel, { marginTop: 20 }]}>전화번호</Text>
-              <TextInput
-                style={styles.addressInput}
-                value={editPhoneNumber}
-                onChangeText={setEditPhoneNumber}
-                placeholder="전화번호를 입력해주세요"
-                placeholderTextColor="#94a3b8"
-                keyboardType="phone-pad"
-              />
-
+              <TextInput style={styles.addressInput} value={editPhoneNumber} onChangeText={setEditPhoneNumber} placeholder="전화번호를 입력해주세요" placeholderTextColor="#94a3b8" keyboardType="phone-pad" />
               <Text style={[styles.editLabel, { marginTop: 20 }]}>거주 유형</Text>
               <View style={styles.chipGrid}>
                 {(["ONE_ROOM", "OFFICETEL", "APT", "VILLA", "HOUSE"] as ResidenceType[]).map((t) => (
@@ -207,7 +178,6 @@ export default function MyPage() {
                   </Pressable>
                 ))}
               </View>
-
               <Text style={[styles.editLabel, { marginTop: 20 }]}>임대 유형</Text>
               <View style={styles.chipGrid}>
                 {(["NONE", "MONTHLY", "JEONSE", "SALE"] as RentType[]).map((t) => (
@@ -216,30 +186,19 @@ export default function MyPage() {
                   </Pressable>
                 ))}
               </View>
-
               <Text style={[styles.editLabel, { marginTop: 20 }]}>상세 주소</Text>
-              <TextInput 
-                style={styles.addressInput} 
-                value={editAddress} 
-                onChangeText={setEditAddress} 
-                placeholder="상세 주소를 입력해주세요" 
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Pressable style={styles.saveBtn} onPress={handleSaveProfile}>
-                <Text style={styles.saveBtnText}>개인정보 변경 내용 저장</Text>
-              </Pressable>
+              <TextInput style={styles.addressInput} value={editAddress} onChangeText={setEditAddress} placeholder="상세 주소를 입력해주세요" placeholderTextColor="#94a3b8" />
+              <Pressable style={styles.saveBtn} onPress={handleSaveProfile}><Text style={styles.saveBtnText}>개인정보 변경 내용 저장</Text></Pressable>
             </View>
           )}
         </View>
 
-        {/* 3. 리포트 내역 */}
+        {/* 리포트 내역 섹션 생략 (기본 동일) */}
         <View style={styles.reportSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>리포트 내역 ({reports.length})</Text>
             <Pressable onPress={reload}><Text style={styles.reloadText}>새로고침</Text></Pressable>
           </View>
-
           {sortedReports.length === 0 ? (
             <View style={styles.emptyCard}><Text style={styles.emptyText}>리포트가 아직 없습니다.</Text></View>
           ) : (
@@ -248,46 +207,39 @@ export default function MyPage() {
               return (
                 <View key={r.reportId} style={styles.reportCard}>
                   <View style={styles.reportHeader}>
-                    <Text style={styles.reportDate}>
-                      {new Date(r.createdAt).toISOString().slice(0, 10)} · {issueLabel(r.issueType)}
-                    </Text>
+                    <Text style={styles.reportDate}>{new Date(r.createdAt).toISOString().slice(0, 10)} · {issueLabel(r.issueType)}</Text>
                   </View>
                   <View style={styles.reportInfoRow}>
                     <Text style={styles.infoText}>위험도: {r.riskScore}%</Text>
                     <Text style={styles.infoText}>추천: {r.recommendation === "DIY" ? "DIY" : "전문업체"}</Text>
-                    <Text style={[styles.statusText, isReady && {color: MAIN_BLUE}]}>
-                      {isReady ? "발급완료" : r.status === "GENERATING" ? "생성중" : "미발급"}
-                    </Text>
+                    <Text style={[styles.statusText, isReady && {color: MAIN_BLUE}]}>{isReady ? "발급완료" : r.status === "GENERATING" ? "생성중" : "미발급"}</Text>
                   </View>
                   <View style={styles.reportActions}>
-                    <Pressable onPress={() => handleGenerate(r)} style={styles.genBtn}>
-                      <Text style={styles.genBtnText}>PDF 생성</Text>
-                    </Pressable>
-                    <Pressable 
-                      onPress={() => handleDownload(r)} 
-                      disabled={!isReady} 
-                      style={[styles.downBtn, !isReady && {backgroundColor: '#e2e8f0'}]}
-                    >
-                      <Text style={[styles.downBtnText, !isReady && {color: '#94a3b8'}]}>다운로드</Text>
-                    </Pressable>
+                    <Pressable onPress={() => handleGenerate(r)} style={styles.genBtn}><Text style={styles.genBtnText}>PDF 생성</Text></Pressable>
+                    <Pressable onPress={() => handleDownload(r)} disabled={!isReady} style={[styles.downBtn, !isReady && {backgroundColor: '#e2e8f0'}]}><Text style={[styles.downBtnText, !isReady && {color: '#94a3b8'}]}>다운로드</Text></Pressable>
                   </View>
-                  <Pressable 
-                    onPress={() => router.push({ pathname: "/report/[reportId]", params: { reportId: String(r.reportId) } })} 
-                    style={styles.detailBtn}
-                  >
-                    <Text style={styles.detailBtnText}>상세 보기</Text>
-                  </Pressable>
+                  <Pressable onPress={() => router.push({ pathname: "/report/[reportId]", params: { reportId: String(r.reportId) } })} style={styles.detailBtn}><Text style={styles.detailBtnText}>상세 보기</Text></Pressable>
                 </View>
               );
             })
           )}
         </View>
 
-        {/* 4. 앱 정보 */}
+        {/* 4. 앱 정보 (도움말/가이드 추가됨) */}
         <View style={styles.menuContainer}>
           <Text style={styles.menuGroupLabel}>시스템</Text>
           <View style={styles.menuList}>
-            <View style={styles.menuItem}>
+            {/* 가이드라인 보기 버튼 추가 */}
+            <Pressable 
+              style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: '#f1f5f9' }]} 
+              onPress={() => setGuideVisible(true)}
+            >
+              <Feather name="help-circle" size={18} color={MAIN_BLUE} />
+              <Text style={styles.menuItemText}>서비스 이용 가이드</Text>
+              <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
+            </Pressable>
+
+            <View style={[styles.menuItem, { borderTopWidth: 1, borderTopColor: '#f1f5f9' }]}>
               <Feather name="info" size={18} color={MAIN_BLUE} />
               <Text style={styles.menuItemText}>앱 버전 정보</Text>
               <Text style={styles.versionText}>v1.0.0</Text>
@@ -309,10 +261,14 @@ export default function MyPage() {
 
         <Text style={styles.footerInfo}>© 2026 DduckTack. All rights reserved.</Text>
       </ScrollView>
+
+      {/* 가이드라인 모달 추가 */}
+      <Guideline visible={guideVisible} onFinish={() => setGuideVisible(false)} />
     </SafeAreaView>
   );
 }
 
+// styles는 기존 스타일에 도움말 아이템용 스타일을 살짝 보강했습니다.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff" },
   header: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16 },
