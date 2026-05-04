@@ -5,7 +5,7 @@ import { router } from "expo-router";
 const baseURL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 export const apiClient = axios.create({
-    baseURL,
+    baseURL: process.env.EXPO_PUBLIC_API_BASE_URL,
     timeout: 10000,
 });
 console.log("🔥 API baseURL:", process.env.EXPO_PUBLIC_API_BASE_URL);
