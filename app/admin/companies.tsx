@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import ScreenState from "../../src/components/ScreenState";
 import { listAdminCompanies, getAdminCompanyDetail, setAdminCompanyActive, type AdminCompanyListItem } from "../../src/api/admin";
 import { ensureAdminOrRedirect } from "../../src/utils/admin";
@@ -10,7 +11,7 @@ export default function AdminCompaniesPage() {
   const [items, setItems] = useState<AdminCompanyListItem[]>([]);
   const [activeMap, setActiveMap] = useState<Record<number, boolean>>({});
 
-  async function load() {
+  const load = useCallback(async () => {
     const allowed = await ensureAdminOrRedirect();
     if (!allowed) return;
     try {
@@ -31,11 +32,13 @@ export default function AdminCompaniesPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    load();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   async function handleToggle(id: number, active: boolean) {
     try {
