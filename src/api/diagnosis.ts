@@ -2,6 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiClient } from "./apiClient";
 
 const PENDING_IMAGES_KEY = "pending_images_v1";
+const DIAGNOSIS_IMAGE_CACHE_KEY = "diagnosis_images_by_history_v1";
+
+export type CachedDiagnosisImages = {
+  historyId: string;
+  diagnosisId?: string;
+  imageUris: string[];
+  imageKeys: string[];
+  updatedAt: string;
+};
 
 export async function setPendingImages(uris: string[]) {
   await AsyncStorage.setItem(PENDING_IMAGES_KEY, JSON.stringify(uris));
@@ -22,6 +31,28 @@ export async function getPendingImages(): Promise<string[]> {
 
 export async function clearPendingImages() {
   await AsyncStorage.removeItem(PENDING_IMAGES_KEY);
+}
+
+async function loadDiagnosisImageCache(): Promise<Record<string, CachedDiagnosisImages>> {
+  const raw = await AsyncStorage.getItem(DIAGNOSIS_IMAGE_CACHE_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveDiagnosisImagesForHistory(input: CachedDiagnosisImages) {
+  const cache = await loadDiagnosisImageCache();
+  cache[input.historyId] = input;
+  await AsyncStorage.setItem(DIAGNOSIS_IMAGE_CACHE_KEY, JSON.stringify(cache));
+}
+
+export async function getCachedDiagnosisImages(historyId: string): Promise<CachedDiagnosisImages | null> {
+  const cache = await loadDiagnosisImageCache();
+  return cache[String(historyId)] ?? null;
 }
 
 export async function startDiagnosis(): Promise<{
@@ -73,12 +104,25 @@ export async function startDiagnosis(): Promise<{
 
   const result = analysisRes.data?.data ?? analysisRes.data;
 
+  const historyId = String(result?.historyId);
+  const diagnosisId = result?.diagnosisId == null ? undefined : String(result.diagnosisId);
+
+  if (historyId && historyId !== "undefined") {
+    await saveDiagnosisImagesForHistory({
+      historyId,
+      diagnosisId,
+      imageUris: images,
+      imageKeys: fileKeys,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   // 5. 이미지 목록 삭제
   await clearPendingImages();
 
   return {
-    historyId: String(result?.historyId),
-    diagnosisId: String(result?.diagnosisId),
+    historyId,
+    diagnosisId: diagnosisId ?? "",
     status: String(result?.status ?? "ANALYZING"),
   };
 }

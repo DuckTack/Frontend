@@ -6,7 +6,7 @@ import { Ionicons, Feather } from "@expo/vector-icons";
 // [원본 API 및 스토리지 로직 유지]
 import ScreenState from "../src/components/ScreenState";
 import { clearAccessToken } from "../src/store/tokenStorage";
-import { openReportPdf, generateReport, listMyReports, MyReportItem } from "../src/api/reports";
+import { openReportPdf, listMyReports, MyReportItem } from "../src/api/reports";
 import { getMe, updateMe, Me, ResidenceType, RentType } from "../src/api/users";
 
 const MAIN_BLUE = "#3b82f6";
@@ -48,9 +48,6 @@ export default function MyPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [reports, setReports] = useState<MyReportItem[]>([]);
   const [editOpen, setEditOpen] = useState(false);
-  const [editUsername, setEditUsername] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editPhoneNumber, setEditPhoneNumber] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editResidenceType, setEditResidenceType] = useState<ResidenceType>("ONE_ROOM");
   const [editRentType, setEditRentType] = useState<RentType>("NONE");
@@ -61,9 +58,6 @@ export default function MyPage() {
       const [meData, reportData] = await Promise.all([getMe(), listMyReports()]);
       setMe(meData);
       setReports(reportData);
-      setEditUsername(meData.username ?? "");
-      setEditEmail(meData.email ?? "");
-      setEditPhoneNumber(meData.phoneNumber ?? "");
       setEditResidenceType(meData.residenceType);
       setEditRentType(meData.rentType);
       setEditAddress(meData.address ?? "");
@@ -84,14 +78,11 @@ export default function MyPage() {
     [reports]
   );
 
-  async function handleGenerate(report: MyReportItem) {
-    try {
-      await generateReport(report.diagnosisId);
-      Alert.alert("PDF 생성 요청 완료", "잠시 후 새로고침 해주세요.");
-      await reload();
-    } catch {
-      Alert.alert("PDF 생성 실패");
-    }
+  function handleGenerate(report: MyReportItem) {
+    router.push({
+      pathname: "/report/[reportId]",
+      params: { reportId: String(report.reportId) },
+    });
   }
 
   async function handleDownload(report: MyReportItem) {
@@ -105,9 +96,6 @@ export default function MyPage() {
   async function handleSaveProfile() {
     try {
       const updated = await updateMe({
-        username: editUsername.trim(),
-        email: editEmail.trim(),
-        phoneNumber: editPhoneNumber.trim(),
         residenceType: editResidenceType,
         rentType: editRentType,
         address: editAddress,
@@ -168,36 +156,22 @@ export default function MyPage() {
             <View style={styles.editFormContainer}>
               <View style={styles.divider} />
               
-              <Text style={styles.editLabel}>아이디</Text>
-              <TextInput
-                style={styles.addressInput}
-                value={editUsername}
-                onChangeText={setEditUsername}
-                placeholder="아이디를 입력해주세요"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-              />
-
-              <Text style={[styles.editLabel, { marginTop: 20 }]}>이메일</Text>
-              <TextInput
-                style={styles.addressInput}
-                value={editEmail}
-                onChangeText={setEditEmail}
-                placeholder="이메일을 입력해주세요"
-                placeholderTextColor="#94a3b8"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
-              <Text style={[styles.editLabel, { marginTop: 20 }]}>전화번호</Text>
-              <TextInput
-                style={styles.addressInput}
-                value={editPhoneNumber}
-                onChangeText={setEditPhoneNumber}
-                placeholder="전화번호를 입력해주세요"
-                placeholderTextColor="#94a3b8"
-                keyboardType="phone-pad"
-              />
+              <Text style={styles.editLabel}>계정 정보</Text>
+              <View style={styles.readOnlyBox}>
+                <View style={styles.readOnlyRow}>
+                  <Text style={styles.readOnlyLabel}>아이디</Text>
+                  <Text style={styles.readOnlyValue}>{me?.username || "-"}</Text>
+                </View>
+                <View style={styles.readOnlyRow}>
+                  <Text style={styles.readOnlyLabel}>이메일</Text>
+                  <Text style={styles.readOnlyValue}>{me?.email || "-"}</Text>
+                </View>
+                <View style={[styles.readOnlyRow, { borderBottomWidth: 0 }]}>
+                  <Text style={styles.readOnlyLabel}>전화번호</Text>
+                  <Text style={styles.readOnlyValue}>{me?.phoneNumber || "-"}</Text>
+                </View>
+              </View>
+              <Text style={styles.immutableHelp}>이메일 인증 및 계정 식별에 사용하는 정보라 앱에서 직접 수정할 수 없습니다.</Text>
 
               <Text style={[styles.editLabel, { marginTop: 20 }]}>거주 유형</Text>
               <View style={styles.chipGrid}>
@@ -227,7 +201,7 @@ export default function MyPage() {
               />
 
               <Pressable style={styles.saveBtn} onPress={handleSaveProfile}>
-                <Text style={styles.saveBtnText}>개인정보 변경 내용 저장</Text>
+                <Text style={styles.saveBtnText}>거주 정보 변경 내용 저장</Text>
               </Pressable>
             </View>
           )}
@@ -261,7 +235,7 @@ export default function MyPage() {
                   </View>
                   <View style={styles.reportActions}>
                     <Pressable onPress={() => handleGenerate(r)} style={styles.genBtn}>
-                      <Text style={styles.genBtnText}>PDF 생성</Text>
+                      <Text style={styles.genBtnText}>PDF 작성</Text>
                     </Pressable>
                     <Pressable 
                       onPress={() => handleDownload(r)} 
@@ -355,6 +329,11 @@ const styles = StyleSheet.create({
   editFormContainer: { marginTop: 20 },
   divider: { height: 1, backgroundColor: '#f1f5f9', marginBottom: 20 },
   editLabel: { fontSize: 13, fontWeight: '800', color: '#334155', marginBottom: 10 },
+  readOnlyBox: { backgroundColor: '#f8fafc', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 14 },
+  readOnlyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', gap: 12 },
+  readOnlyLabel: { fontSize: 12, color: '#64748b', fontWeight: '700' },
+  readOnlyValue: { flex: 1, textAlign: 'right', fontSize: 13, color: '#334155', fontWeight: '700' },
+  immutableHelp: { marginTop: 8, marginLeft: 4, fontSize: 12, color: '#94a3b8', lineHeight: 18 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
   chipActive: { backgroundColor: MAIN_BLUE, borderColor: MAIN_BLUE },

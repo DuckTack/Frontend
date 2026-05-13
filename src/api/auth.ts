@@ -32,11 +32,24 @@ export type ResetPasswordRequest = {
 };
 
 function pickBooleanAvailable(body: any): boolean {
-  const available = body?.data?.available ?? body?.available;
-  if (typeof available !== "boolean") {
-    throw new Error("INVALID_AVAILABLE_RESPONSE");
+  const data = body?.data ?? body;
+
+  if (typeof data === "boolean") return data;
+
+  const positiveKeys = ["available", "isAvailable", "emailAvailable", "usernameAvailable", "phoneAvailable"];
+  for (const key of positiveKeys) {
+    if (typeof data?.[key] === "boolean") return data[key];
+    if (typeof body?.[key] === "boolean") return body[key];
   }
-  return available;
+
+  const negativeKeys = ["duplicated", "duplicate", "exists", "alreadyExists", "used"];
+  for (const key of negativeKeys) {
+    if (typeof data?.[key] === "boolean") return !data[key];
+    if (typeof body?.[key] === "boolean") return !body[key];
+  }
+
+  console.warn("[중복검사] 사용 가능 여부를 해석할 수 없는 응답:", JSON.stringify(body, null, 2));
+  throw new Error("INVALID_AVAILABLE_RESPONSE");
 }
 
 function pickBooleanFlag(body: any, fieldName: string): boolean {
@@ -75,7 +88,7 @@ export async function checkUsernameAvailable(username: string): Promise<boolean>
 }
 
 export async function checkPhoneAvailable(phoneNumber: string): Promise<boolean> {
-  const trimmed = phoneNumber.replace(/[^0-9]/g, "");
+  const trimmed = phoneNumber.trim();
   if (!trimmed) return false;
 
   const res = await apiClient.get("/api/auth/check-phone", {
@@ -88,10 +101,25 @@ export async function checkEmailAvailable(email: string): Promise<boolean> {
   const trimmed = email.trim().toLowerCase();
   if (!trimmed) return false;
 
-  const res = await apiClient.get("/api/auth/check-email", {
-    params: { email: trimmed },
-  });
-  return pickBooleanAvailable(res.data);
+  try {
+    const res = await apiClient.get("/api/auth/check-email", {
+      params: { email: trimmed },
+    });
+    console.log("[이메일 중복검사] 요청 이메일:", trimmed);
+    console.log("[이메일 중복검사] 원본 응답:", JSON.stringify(res.data, null, 2));
+
+    const available = pickBooleanAvailable(res.data);
+    console.log("[이메일 중복검사] 해석 결과:", available ? "사용 가능" : "사용 불가");
+    return available;
+  } catch (error: any) {
+    console.error("[이메일 중복검사] 실패:", {
+      email: trimmed,
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
+    throw error;
+  }
 }
 
 export async function sendEmailVerificationCode(email: string): Promise<void> {
@@ -145,8 +173,8 @@ export async function signup(req: SignupRequest): Promise<void> {
   await apiClient.post("/api/auth/signup", {
     username: req.username.trim(),
     email: req.email.trim().toLowerCase(),
-    password: req.password.trim(),
-    phoneNumber: req.phoneNumber.replace(/[^0-9]/g, ""),
+    password: req.password,
+    phoneNumber: req.phoneNumber.trim(),
     residenceType: req.residenceType,
     rentType: req.rentType,
     address: req.address?.trim() || "",

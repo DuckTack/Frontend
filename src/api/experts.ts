@@ -6,10 +6,18 @@ export type VendorRegion = (typeof VENDOR_REGIONS)[number];
 export type ExpertVendorSort = "price" | "rating" | "name";
 
 export type ExpertVendor = {
+  /** 화면 렌더링/라우팅용 안정 key. 제휴 업체는 companyId, 카카오 업체는 kakaoPlaceId 기반으로 만든다. */
   id: string;
+  /** 제휴 업체 DB PK. partner=true 업체일 때 사용한다. */
+  companyId?: string;
+  /** 카카오 장소 ID. partner=false 업체일 때 리뷰 조회/작성 기준으로 사용한다. */
+  kakaoPlaceId?: string;
   name: string;
   region: string;
   minPrice: number;
+  /** 카드 표시용 평균 별점. null 이면 아직 리뷰 없음. */
+  avgRating: number | null;
+  /** 기존 화면 정렬 호환용. avgRating 이 없으면 0으로 둔다. */
   rating: number;
   reviewCount: number;
   intro: string;
@@ -21,7 +29,7 @@ export type ExpertVendor = {
   serviceRegionLabel?: string;
   distanceKm?: number;
   maxPrice?: number;
-  /** 제휴 업체 여부. true = 관리자가 등록한 제휴 업체, false/undefined = 네이버 지역검색 결과 */
+  /** 제휴 업체 여부. true = 백엔드에 등록된 제휴 업체, false/undefined = 외부 지역검색 결과 */
   isPartner?: boolean;
 };
 
@@ -39,12 +47,15 @@ function toNumberOrUndefined(value: unknown) {
 
 function normalizeVendor(raw: any): ExpertVendor {
   return {
-    id: String(raw?.id ?? raw?.vendorId ?? ""),
-    name: String(raw?.name ?? ""),
+    id: String(raw?.id ?? raw?.companyId ?? raw?.vendorId ?? ""),
+    companyId: raw?.id !== null && raw?.id !== undefined ? String(raw.id) : raw?.companyId ? String(raw.companyId) : undefined,
+    kakaoPlaceId: raw?.kakaoPlaceId ? String(raw.kakaoPlaceId) : undefined,
+    name: String(raw?.name ?? raw?.kakaoPlaceName ?? ""),
     region: String(raw?.region ?? raw?.serviceRegionLabel ?? ""),
     minPrice: Number(raw?.minPrice ?? raw?.minEstimatedQuoteKrw ?? 0),
     maxPrice: toNumberOrUndefined(raw?.maxEstimatedQuoteKrw),
-    rating: Number(raw?.rating ?? 0),
+    avgRating: raw?.avgRating === null || raw?.avgRating === undefined ? null : Number(raw.avgRating),
+    rating: Number(raw?.avgRating ?? raw?.rating ?? 0),
     reviewCount: Number(raw?.reviewCount ?? 0),
     intro: String(raw?.intro ?? raw?.capabilityNote ?? ""),
     coverageAreas: Array.isArray(raw?.coverageAreas)
@@ -58,8 +69,8 @@ function normalizeVendor(raw: any): ExpertVendor {
     addressLine: raw?.addressLine ? String(raw.addressLine) : undefined,
     serviceRegionLabel: raw?.serviceRegionLabel ? String(raw.serviceRegionLabel) : undefined,
     distanceKm: toNumberOrUndefined(raw?.distanceKm),
-    // /api/experts/vendors 결과는 모두 관리자 등록 제휴 업체로 가정
-    isPartner: raw?.isPartner === false ? false : true,
+    // /api/experts/vendors 결과는 모두 백엔드 등록 제휴 업체로 가정
+    isPartner: raw?.partner === false || raw?.isPartner === false ? false : true,
   };
 }
 
@@ -85,8 +96,8 @@ export async function listExpertVendors(params: {
 
 /**
  * 백엔드 GET /api/companies/nearby?lat=..&lon=..&keyword=..
- * 응답: ApiResponse<List<NearbyCompanyResponse{ id, name, phone, address, latitude, longitude, distanceKm, isPartner }>>
- *  - id 는 네이버 비제휴 업체의 경우 null (프론트에서 안정적 key 를 합성해 준다)
+ * 응답: ApiResponse<List<NearbyCompanyResponse{ id, name, phone, address, latitude, longitude, distanceKm, partner, kakaoPlaceId, avgRating, reviewCount }>>
+ *  - id 는 카카오 비제휴 업체의 경우 null (프론트에서 안정적 key 를 합성해 준다)
  *  - 필드명은 address (addressLine 아님)
  */
 export async function listNearbyCompanies(params: NearbyCompanyRequest & { keyword?: string }): Promise<ExpertVendor[]> {
@@ -94,7 +105,7 @@ export async function listNearbyCompanies(params: NearbyCompanyRequest & { keywo
     params: {
       lat: params.latitude,
       lon: params.longitude,
-      // 지역명을 키워드로 전달(백엔드가 "{keyword} 수리 업체" 로 네이버 지역검색 수행).
+      // 지역명을 키워드로 전달(백엔드가 "{keyword} 수리 업체" 로 카카오 지역검색 수행).
       // 호출부에서 명시적 keyword 를 넘기면 그것을 우선한다.
       keyword: params.keyword ?? params.region,
     },
@@ -106,18 +117,25 @@ export async function listNearbyCompanies(params: NearbyCompanyRequest & { keywo
     const name = String(item?.name ?? "");
     const lat = toNumberOrUndefined(item?.latitude);
     const lng = toNumberOrUndefined(item?.longitude);
-    // 네이버 결과는 id 가 null 이므로, React key 충돌과 merge 버그를 막기 위해 안정적 합성 id 를 만든다.
+    const kakaoPlaceId = item?.kakaoPlaceId ? String(item.kakaoPlaceId) : undefined;
+    const isPartner = Boolean(item?.partner ?? item?.isPartner);
+    // 카카오 결과는 id 가 null 이므로, React key 충돌을 막기 위해 kakaoPlaceId 우선으로 안정적 key 를 만든다.
     const id =
       rawId !== null && rawId !== undefined && rawId !== ""
         ? String(rawId)
-        : `nearby-${name}-${lat ?? "x"}-${lng ?? "y"}-${index}`;
+        : kakaoPlaceId
+          ? `kakao-${kakaoPlaceId}`
+          : `nearby-${name}-${lat ?? "x"}-${lng ?? "y"}-${index}`;
     return {
       id,
+      companyId: rawId !== null && rawId !== undefined && rawId !== "" ? String(rawId) : undefined,
+      kakaoPlaceId,
       name,
       region: params.region,
       minPrice: Number(item?.minEstimatedQuoteKrw ?? item?.minPrice ?? 0),
       maxPrice: toNumberOrUndefined(item?.maxEstimatedQuoteKrw ?? item?.maxPrice),
-      rating: Number(item?.rating ?? 0),
+      avgRating: item?.avgRating === null || item?.avgRating === undefined ? null : Number(item.avgRating),
+      rating: Number(item?.avgRating ?? item?.rating ?? 0),
       reviewCount: Number(item?.reviewCount ?? 0),
       intro: String(item?.intro ?? ""),
       coverageAreas: [],
@@ -131,8 +149,8 @@ export async function listNearbyCompanies(params: NearbyCompanyRequest & { keywo
         : undefined,
       serviceRegionLabel: item?.serviceRegionLabel ? String(item.serviceRegionLabel) : params.region,
       distanceKm: toNumberOrUndefined(item?.distanceKm),
-      // 백엔드 NearbyCompanyResponse.isPartner 를 그대로 전달 (제휴 여부)
-      isPartner: Boolean(item?.isPartner),
+      // 백엔드 NearbyCompanyResponse.partner 를 그대로 전달 (제휴 여부)
+      isPartner,
     };
   });
 }

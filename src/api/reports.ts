@@ -22,11 +22,21 @@ export type MyReportItem = {
     riskScore: number;
     recommendation: Recommendation;
     status: ReportStatus;
+    expertVendorId?: string;
+    expertVendorName?: string;
+    reviewWritten?: boolean;
 };
 
 export type UploadedReportImage = {
     fileKey: string;
     url?: string;
+};
+
+export type FrontendGeneratedPdfResponse = {
+    storageKey?: string;
+    url?: string;
+    contentType?: string;
+    sizeBytes?: number;
 };
 
 export type SaveReportDraftRequest = {
@@ -45,6 +55,9 @@ export type SaveReportDraftRequest = {
     diyWorkMemo: string;
     beforeImageKeys?: string[];
     afterImageKeys?: string[];
+    diagnosisImageKeys?: string[];
+    useDiagnosisImagesAsBefore?: boolean;
+    templateVersion?: string;
 };
 
 function statusFromHistory(history: HistoryDetail): ReportStatus {
@@ -63,6 +76,9 @@ function toReportItem(history: HistoryDetail): MyReportItem {
         riskScore: history.riskScore,
         recommendation: history.recommendation,
         status: statusFromHistory(history),
+        expertVendorId: history.expertVendorId,
+        expertVendorName: history.expertVendorName,
+        reviewWritten: history.reviewWritten,
     };
 }
 
@@ -162,7 +178,11 @@ function guessMimeType(uri: string) {
     return "image/jpeg";
 }
 
-export async function uploadReportImages(uris: string[]): Promise<UploadedReportImage[]> {
+export async function uploadReportImages(
+    diagnosisId: string | number,
+    type: "BEFORE" | "AFTER",
+    uris: string[]
+): Promise<UploadedReportImage[]> {
     if (uris.length === 0) return [];
 
     const formData = new FormData();
@@ -175,7 +195,8 @@ export async function uploadReportImages(uris: string[]): Promise<UploadedReport
         } as any);
     });
 
-    const res = await apiClient.post("/api/files/upload", formData, {
+    const res = await apiClient.post("/api/reports/images/upload", formData, {
+        params: { diagnosisId, type },
         headers: {
             "Content-Type": "multipart/form-data",
         },
@@ -188,10 +209,13 @@ export async function uploadReportImages(uris: string[]): Promise<UploadedReport
           ? body
           : [];
 
-    return files.map((file: any) => ({
-        fileKey: String(file?.fileKey ?? file?.key ?? file?.id ?? ""),
-        url: file?.url ? String(file.url) : undefined,
-    }));
+    return files.map((file: any) => {
+        const fileKey = typeof file === "string" ? file : file?.fileKey ?? file?.key ?? file?.id ?? "";
+        return {
+            fileKey: String(fileKey),
+            url: typeof file === "object" && file?.url ? String(file.url) : undefined,
+        };
+    });
 }
 
 export async function saveReportDraft(
@@ -202,4 +226,29 @@ export async function saveReportDraft(
         `/api/reports/diagnosis/${diagnosisId}/draft`,
         data
     );
+}
+
+export async function uploadFrontendGeneratedPdf(
+    diagnosisId: string | number,
+    pdfUri: string
+): Promise<FrontendGeneratedPdfResponse> {
+    const formData = new FormData();
+    formData.append("file", {
+        uri: pdfUri,
+        name: `dduckttack-report-${diagnosisId}.pdf`,
+        type: "application/pdf",
+    } as any);
+    formData.append("templateVersion", "FRONTEND_REPORT_V1");
+
+    const res = await apiClient.post(
+        `/api/reports/diagnosis/${diagnosisId}/frontend-pdf`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        }
+    );
+
+    return res.data?.data ?? res.data ?? {};
 }

@@ -12,11 +12,10 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import axios from "axios";
-
 // [원본 상대 경로 및 API 로직 보존]
 import { getHistoryDetail, IssueType } from "../src/api/histories";
 import { getMe } from "../src/api/users";
+import { apiClient } from "../src/api/apiClient";
 
 const MAIN_BLUE = "#3b82f6";
 
@@ -36,6 +35,13 @@ export default function ExpertBooking() {
   const {
     historyId,
     vendorId,
+    companyId,
+    kakaoPlaceId,
+    kakaoPlaceName,
+    kakaoPlacePhone,
+    kakaoPlaceAddress,
+    kakaoPlaceLat,
+    kakaoPlaceLng,
     vendorName,
     vendorPhone,
     vendorIntro,
@@ -44,6 +50,13 @@ export default function ExpertBooking() {
   } = useLocalSearchParams<{
     historyId?: string;
     vendorId?: string;
+    companyId?: string;
+    kakaoPlaceId?: string;
+    kakaoPlaceName?: string;
+    kakaoPlacePhone?: string;
+    kakaoPlaceAddress?: string;
+    kakaoPlaceLat?: string;
+    kakaoPlaceLng?: string;
     vendorName?: string;
     vendorPhone?: string;
     vendorIntro?: string;
@@ -95,14 +108,23 @@ export default function ExpertBooking() {
     }
 
     try {
-      await axios.post("/api/reservations", {
-        vendorId: Number(vendorId),
+      await apiClient.post("/api/reservations", {
+        historyId: historyId ? Number(historyId) : undefined,
+        vendorId,
+        companyId: companyId ? Number(companyId) : undefined,
+        kakaoPlaceId,
+        kakaoPlaceName: kakaoPlaceName ?? vendorName,
+        kakaoPlacePhone: kakaoPlacePhone ?? vendorPhone,
+        kakaoPlaceAddress,
+        kakaoPlaceLat: kakaoPlaceLat ? Number(kakaoPlaceLat) : undefined,
+        kakaoPlaceLng: kakaoPlaceLng ? Number(kakaoPlaceLng) : undefined,
+        vendorName,
         customerName,
         phoneNumber,
         address,
         visitDate,
         issueSummary,
-        requestNote
+        requestNote,
       });
 
       Alert.alert("예약 완료");

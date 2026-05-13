@@ -69,6 +69,35 @@ export default function Histories() {
     ]);
   }
 
+  function handleReviewPress(item: HistorySummary) {
+    const historyId = getHistoryId(item);
+    const companyId = item.companyId ?? item.expertVendorId;
+    const kakaoPlaceId = item.kakaoPlaceId;
+
+    if (!companyId && !kakaoPlaceId) {
+      Alert.alert(
+        "업체 정보 필요",
+        "리뷰를 남기려면 해당 진단 기록에 제휴 업체 ID 또는 카카오 place ID가 연결되어 있어야 합니다."
+      );
+      return;
+    }
+
+    router.push({
+      pathname: "/review-form",
+      params: {
+        historyId,
+        companyId,
+        kakaoPlaceId,
+        kakaoPlaceName: item.kakaoPlaceName ?? item.expertVendorName,
+        kakaoPlacePhone: item.kakaoPlacePhone,
+        kakaoPlaceAddress: item.kakaoPlaceAddress,
+        kakaoPlaceLat: item.kakaoPlaceLat != null ? String(item.kakaoPlaceLat) : undefined,
+        kakaoPlaceLng: item.kakaoPlaceLng != null ? String(item.kakaoPlaceLng) : undefined,
+        vendorName: item.expertVendorName ?? item.kakaoPlaceName ?? "전문업체",
+      },
+    });
+  }
+
   const issueLabel = (t: IssueType) => {
     switch (t) {
       case "CRACK": return "균열";
@@ -186,6 +215,18 @@ export default function Histories() {
                       </View>
                     </View>
                   </Pressable>
+                  {status === "READY" && (
+                    <Pressable
+                      onPress={() => handleReviewPress(it)}
+                      disabled={it.reviewWritten}
+                      style={[styles.reviewWriteBtn, it.reviewWritten && styles.reviewWriteBtnDisabled]}
+                    >
+                      <Feather name={it.reviewWritten ? "check" : "edit-3"} size={15} color={it.reviewWritten ? "#94a3b8" : MAIN_BLUE} />
+                      <Text style={[styles.reviewWriteText, it.reviewWritten && styles.reviewWriteTextDisabled]}>
+                        {it.reviewWritten ? "리뷰 작성 완료" : "리뷰 작성"}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
               );
             })
@@ -231,6 +272,10 @@ const styles = StyleSheet.create({
   costLabel: { fontSize: 11, color: "#94a3b8" },
   costValue: { fontSize: 17, fontWeight: "800", color: MAIN_BLUE },
   deleteIconButton: { padding: 8 }, 
+  reviewWriteBtn: { marginTop: 14, height: 42, borderRadius: 14, backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#dbeafe", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  reviewWriteBtnDisabled: { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+  reviewWriteText: { color: MAIN_BLUE, fontSize: 13, fontWeight: "800" },
+  reviewWriteTextDisabled: { color: "#94a3b8" },
   emptyBox: { padding: 80, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: "#94a3b8", fontSize: 15, textAlign: 'center' }
 });
