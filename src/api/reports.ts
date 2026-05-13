@@ -22,6 +22,42 @@ export type MyReportItem = {
     riskScore: number;
     recommendation: Recommendation;
     status: ReportStatus;
+    expertVendorId?: string;
+    expertVendorName?: string;
+    reviewWritten?: boolean;
+};
+
+export type UploadedReportImage = {
+    fileKey: string;
+    url?: string;
+};
+
+export type FrontendGeneratedPdfResponse = {
+    storageKey?: string;
+    url?: string;
+    contentType?: string;
+    sizeBytes?: number;
+};
+
+export type SaveReportDraftRequest = {
+    repairMethod: string;
+    repairDate: string;
+    contractorName: string;
+    contractorContact: string;
+    repairSummary: string;
+    actualCostKrw: number;
+    notes: string;
+    materialCost: string;
+    laborCost: string;
+    totalCost: string;
+    diyMaterialsUsed: string;
+    diyMaterialCost: string;
+    diyWorkMemo: string;
+    beforeImageKeys?: string[];
+    afterImageKeys?: string[];
+    diagnosisImageKeys?: string[];
+    useDiagnosisImagesAsBefore?: boolean;
+    templateVersion?: string;
 };
 
 function statusFromHistory(history: HistoryDetail): ReportStatus {
@@ -40,12 +76,12 @@ function toReportItem(history: HistoryDetail): MyReportItem {
         riskScore: history.riskScore,
         recommendation: history.recommendation,
         status: statusFromHistory(history),
+        expertVendorId: history.expertVendorId,
+        expertVendorName: history.expertVendorName,
+        reviewWritten: history.reviewWritten,
     };
 }
 
-// =========================
-// 리스트
-// =========================
 export async function listMyReports(): Promise<MyReportItem[]> {
     const histories = await listHistories();
 
@@ -63,9 +99,6 @@ export async function listMyReports(): Promise<MyReportItem[]> {
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
-// =========================
-// 단건 조회
-// =========================
 export async function getMyReportById(
     reportId: string
 ): Promise<MyReportItem | null> {
@@ -73,9 +106,6 @@ export async function getMyReportById(
     return list.find((item) => String(item.reportId) === String(reportId)) ?? null;
 }
 
-// =========================
-// 상태맵
-// =========================
 export async function getReportStatusMapForHistoryIds(
     historyIds: string[]
 ): Promise<Record<string, ReportStatus>> {
@@ -93,9 +123,6 @@ export async function getReportStatusMapForHistoryIds(
     return Object.fromEntries(details);
 }
 
-// =========================
-// PDF 생성
-// =========================
 export async function generateReport(
     diagnosisId: string | number
 ): Promise<void> {
@@ -104,9 +131,6 @@ export async function generateReport(
     );
 }
 
-// =========================
-// PDF URL
-// =========================
 export async function getPdfUrl(
     diagnosisId: string | number
 ): Promise<string> {
@@ -116,9 +140,6 @@ export async function getPdfUrl(
     return String(res.data?.data ?? res.data);
 }
 
-// =========================
-// PDF 열기
-// =========================
 export async function openReportPdf(
     diagnosisId: string | number
 ): Promise<void> {
@@ -126,9 +147,6 @@ export async function openReportPdf(
     await Linking.openURL(url);
 }
 
-// =========================
-// PDF 다운로드
-// =========================
 export async function downloadReport(
     diagnosisId: string | number
 ): Promise<string> {
@@ -152,31 +170,85 @@ export async function downloadReport(
     return result.uri;
 }
 
-// =========================
-// 🔥 드래프트 저장 (최종 수정본)
-// =========================
+function guessMimeType(uri: string) {
+    const lower = uri.toLowerCase();
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".heic")) return "image/heic";
+    if (lower.endsWith(".webp")) return "image/webp";
+    return "image/jpeg";
+}
+
+export async function uploadReportImages(
+    diagnosisId: string | number,
+    type: "BEFORE" | "AFTER",
+    uris: string[]
+): Promise<UploadedReportImage[]> {
+    if (uris.length === 0) return [];
+
+    const formData = new FormData();
+    uris.forEach((uri, index) => {
+        const filename = uri.split("/").pop() || `report-image-${index + 1}.jpg`;
+        formData.append("files", {
+            uri,
+            name: filename,
+            type: guessMimeType(uri),
+        } as any);
+    });
+
+    const res = await apiClient.post("/api/reports/images/upload", formData, {
+        params: { diagnosisId, type },
+        headers: {
+            "Content-Type": "multipart/form-data",
+        },
+    });
+
+    const body = res.data?.data ?? res.data;
+    const files = Array.isArray(body?.files)
+        ? body.files
+        : Array.isArray(body)
+          ? body
+          : [];
+
+    return files.map((file: any) => {
+        const fileKey = typeof file === "string" ? file : file?.fileKey ?? file?.key ?? file?.id ?? "";
+        return {
+            fileKey: String(fileKey),
+            url: typeof file === "object" && file?.url ? String(file.url) : undefined,
+        };
+    });
+}
+
 export async function saveReportDraft(
     diagnosisId: string | number,
-    data: {
-        repairMethod: string;
-        repairDate: string;
-        contractorName: string;
-        contractorContact: string;
-        repairSummary: string;
-        actualCostKrw: number;
-        notes: string;
-
-        materialCost: string;
-        laborCost: string;
-        totalCost: string;
-
-        diyMaterialsUsed: string;
-        diyMaterialCost: string;
-        diyWorkMemo: string;
-    }
+    data: SaveReportDraftRequest
 ): Promise<void> {
     await apiClient.put(
         `/api/reports/diagnosis/${diagnosisId}/draft`,
         data
     );
+}
+
+export async function uploadFrontendGeneratedPdf(
+    diagnosisId: string | number,
+    pdfUri: string
+): Promise<FrontendGeneratedPdfResponse> {
+    const formData = new FormData();
+    formData.append("file", {
+        uri: pdfUri,
+        name: `dduckttack-report-${diagnosisId}.pdf`,
+        type: "application/pdf",
+    } as any);
+    formData.append("templateVersion", "FRONTEND_REPORT_V1");
+
+    const res = await apiClient.post(
+        `/api/reports/diagnosis/${diagnosisId}/frontend-pdf`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        }
+    );
+
+    return res.data?.data ?? res.data ?? {};
 }
