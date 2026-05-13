@@ -20,11 +20,12 @@ import * as ImagePicker from "expo-image-picker";
 import ScreenState from "../../src/components/ScreenState";
 import { getMe, Me } from "../../src/api/users";
 import { getHistoryDetail, HistoryDetail } from "../../src/api/histories";
+import { getCachedDiagnosisImages, type CachedDiagnosisImages } from "../../src/api/diagnosis";
 import {
-  generateReport,
   getPdfUrl,
   saveReportDraft,
   type ReportStatus,
+  uploadFrontendGeneratedPdf,
   uploadReportImages,
 } from "../../src/api/reports";
 import {
@@ -33,6 +34,7 @@ import {
   saveLocalReportDraft,
   type ReportDraft,
 } from "../../src/store/reportDraftStorage";
+import { createDesignedReportPdf } from "../../src/utils/reportPdf";
 
 const MAIN_BLUE = "#3b82f6";
 
@@ -64,12 +66,18 @@ function createEmptyDraft(): ReportDraft {
   return { ...EMPTY_DRAFT };
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 export default function ReportDetail() {
   const { reportId } = useLocalSearchParams<{ reportId: string }>();
   const [loading, setLoading] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [history, setHistory] = useState<HistoryDetail | null>(null);
+  const [cachedDiagnosisImages, setCachedDiagnosisImages] = useState<CachedDiagnosisImages | null>(null);
   const [draft, setDraft] = useState<ReportDraft>(createEmptyDraft());
 
   const reportBase = useMemo(() => {
@@ -86,19 +94,31 @@ export default function ReportDetail() {
     };
   }, [history, reportId]);
 
+  const diagnosisBeforeImageUris = useMemo(
+    () => uniqueStrings([...(history?.imageUris ?? []), ...(cachedDiagnosisImages?.imageUris ?? [])]),
+    [history?.imageUris, cachedDiagnosisImages?.imageUris],
+  );
+
+  const diagnosisBeforeImageKeys = useMemo(
+    () => uniqueStrings([...(history?.diagnosisImageKeys ?? []), ...(cachedDiagnosisImages?.imageKeys ?? [])]),
+    [history?.diagnosisImageKeys, cachedDiagnosisImages?.imageKeys],
+  );
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
       if (!reportId) return;
 
-      const [meData, historyData, draftData] = await Promise.all([
+      const [meData, historyData, draftData, cachedImages] = await Promise.all([
         getMe().catch(() => null),
         getHistoryDetail(String(reportId)).catch(() => null),
         loadReportDraft(String(reportId)).catch(() => null),
+        getCachedDiagnosisImages(String(reportId)).catch(() => null),
       ]);
 
       setMe(meData);
       setHistory(historyData);
+      setCachedDiagnosisImages(cachedImages);
       setDraft(draftData ?? createEmptyDraft());
     } catch (e) {
       console.error("데이터 로딩 실패:", e);
@@ -144,21 +164,23 @@ export default function ReportDetail() {
     }));
   }
 
-  async function handleSaveDraft() {
-    if (!reportId) return;
+  async function saveDraftToServer(showSuccessMessage: boolean): Promise<boolean> {
+    if (!reportId) return false;
 
     try {
       setSavingDraft(true);
       await saveLocalReportDraft(String(reportId), draft);
 
       if (!reportBase?.diagnosisId) {
-        Alert.alert("임시 저장 완료", "진단 ID가 준비되면 서버 저장을 진행할 수 있습니다.");
-        return;
+        if (showSuccessMessage) {
+          Alert.alert("임시 저장 완료", "진단 ID가 준비되면 서버 저장을 진행할 수 있습니다.");
+        }
+        return false;
       }
 
       const [beforeUploads, afterUploads] = await Promise.all([
-        uploadReportImages(draft.beforeImageUris),
-        uploadReportImages(draft.afterImageUris),
+        uploadReportImages(reportBase.diagnosisId, "BEFORE", draft.beforeImageUris),
+        uploadReportImages(reportBase.diagnosisId, "AFTER", draft.afterImageUris),
       ]);
 
       await saveReportDraft(String(reportBase.diagnosisId), {
@@ -177,24 +199,56 @@ export default function ReportDetail() {
         diyWorkMemo: draft.diyWorkMemo,
         beforeImageKeys: beforeUploads.map((file) => file.fileKey).filter(Boolean),
         afterImageKeys: afterUploads.map((file) => file.fileKey).filter(Boolean),
+        diagnosisImageKeys: diagnosisBeforeImageKeys,
+        useDiagnosisImagesAsBefore: true,
+        templateVersion: "FRONTEND_REPORT_V1",
       });
-      Alert.alert("저장 완료", "서버와 로컬 임시 저장이 완료되었습니다.");
+
+      if (showSuccessMessage) {
+        Alert.alert("저장 완료", "서버와 로컬 임시 저장이 완료되었습니다.");
+      }
+      return true;
     } catch (e) {
       console.error("report draft save failed", e);
-      Alert.alert("저장 실패", "서버 저장 중 문제가 발생했지만, 로컬 임시 저장은 유지됩니다.");
+      Alert.alert("저장 실패", "서버 저장 중 문제가 발생했습니다. 이미지 업로드/드래프트 저장 API를 확인해주세요.");
+      return false;
     } finally {
       setSavingDraft(false);
     }
   }
 
+  async function handleSaveDraft() {
+    await saveDraftToServer(true);
+  }
+
   async function handleGenerate() {
-    if (!reportBase?.diagnosisId) return;
+    if (!reportBase?.diagnosisId || !history) return;
     try {
-      await generateReport(reportBase.diagnosisId);
-      Alert.alert("생성 요청 완료", "리포트 생성이 시작되었습니다.");
+      setGeneratingPdf(true);
+
+      const saved = await saveDraftToServer(false);
+      if (!saved) return;
+
+      const pdf = await createDesignedReportPdf({
+        reportId: reportBase.reportId,
+        diagnosisId: reportBase.diagnosisId,
+        createdAt: reportBase.createdAt,
+        user: me,
+        history,
+        draft,
+        beforeImages: uniqueStrings([...diagnosisBeforeImageUris, ...draft.beforeImageUris]),
+        afterImages: draft.afterImageUris,
+      });
+
+      await uploadFrontendGeneratedPdf(reportBase.diagnosisId, pdf.uri);
+
+      Alert.alert("PDF 생성 완료", "PDF가 서버에 저장되었습니다.");
       await load();
-    } catch {
-      Alert.alert("생성 실패", "리포트 생성 요청에 실패했습니다.");
+    } catch (e) {
+      console.error("frontend pdf generate failed", e);
+      Alert.alert("생성 실패", "프론트 PDF 생성 또는 PDF 업로드 API를 확인해주세요.");
+    } finally {
+      setGeneratingPdf(false);
     }
   }
 
@@ -292,18 +346,28 @@ export default function ReportDetail() {
 
           <View style={[styles.imageSection, { marginTop: 14 }]}> 
             <View style={styles.imageSectionHeader}>
-              <Text style={styles.imageSectionTitle}>수리 전 사진</Text>
+              <Text style={styles.imageSectionTitle}>수리 전 사진 · 진단 사진 자동 반영</Text>
               <Pressable style={styles.imageAddButton} onPress={() => pickImages("beforeImageUris")}>
                 <Ionicons name="images-outline" size={16} color={MAIN_BLUE} />
-                <Text style={styles.imageAddButtonText}>이미지 첨부</Text>
+                <Text style={styles.imageAddButtonText}>추가 첨부</Text>
               </Pressable>
             </View>
-            {draft.beforeImageUris.length === 0 ? (
-              <View style={styles.emptyImageBox}><Text style={styles.emptyImageText}>첨부한 사진이 없습니다.</Text></View>
+            {diagnosisBeforeImageUris.length === 0 && draft.beforeImageUris.length === 0 ? (
+              <View style={styles.emptyImageBox}>
+                <Text style={styles.emptyImageText}>진단 사진 URL이 아직 응답되지 않았습니다. 추가 사진은 직접 첨부할 수 있습니다.</Text>
+              </View>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
+                {diagnosisBeforeImageUris.map((uri, index) => (
+                  <View key={`diagnosis-${uri}-${index}`} style={styles.imagePreviewCard}>
+                    <Image source={{ uri }} style={styles.imagePreview} />
+                    <View style={styles.autoImageBadge}>
+                      <Text style={styles.autoImageBadgeText}>진단 사진</Text>
+                    </View>
+                  </View>
+                ))}
                 {draft.beforeImageUris.map((uri, index) => (
-                  <View key={`${uri}-${index}`} style={styles.imagePreviewCard}>
+                  <View key={`before-extra-${uri}-${index}`} style={styles.imagePreviewCard}>
                     <Image source={{ uri }} style={styles.imagePreview} />
                     <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("beforeImageUris", index)}>
                       <Ionicons name="close-circle" size={22} color="#ef4444" />
@@ -344,8 +408,8 @@ export default function ReportDetail() {
         </View>
 
         <View style={styles.actionRow}>
-          <Pressable onPress={handleGenerate} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>PDF 생성 요청</Text>
+          <Pressable onPress={handleGenerate} disabled={generatingPdf || savingDraft} style={[styles.secondaryButton, (generatingPdf || savingDraft) && { opacity: 0.6 }]}>
+            {generatingPdf ? <ActivityIndicator size="small" color={MAIN_BLUE} /> : <Text style={styles.secondaryButtonText}>PDF 생성</Text>}
           </Pressable>
           <Pressable onPress={handleOpenPdf} disabled={reportBase?.status !== "READY"} style={[styles.primaryButton, reportBase?.status !== "READY" && { backgroundColor: '#cbd5e1' }]}> 
             <Ionicons name="document-text" size={18} color="#fff" style={{ marginRight: 6 }} />
@@ -388,6 +452,8 @@ const styles = StyleSheet.create({
   imagePreviewCard: { width: 120, height: 120, borderRadius: 16, overflow: "hidden", backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0", position: "relative" },
   imagePreview: { width: "100%", height: "100%" },
   imageRemoveButton: { position: "absolute", top: 6, right: 6, backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 999 },
+  autoImageBadge: { position: "absolute", left: 6, bottom: 6, backgroundColor: "rgba(30,41,59,0.86)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  autoImageBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   emptyImageBox: { minHeight: 72, borderRadius: 14, borderWidth: 1, borderColor: "#e2e8f0", borderStyle: "dashed", backgroundColor: "#f8fafc", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   emptyImageText: { fontSize: 13, color: "#94a3b8" },
   saveButton: { marginTop: 16, height: 54, borderRadius: 16, backgroundColor: "#334155", alignItems: 'center', justifyContent: 'center' },

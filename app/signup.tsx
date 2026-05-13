@@ -28,6 +28,14 @@ import {
 
 const MAIN_BLUE = "#3b82f6";
 
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 72;
+const USERNAME_MIN_LENGTH = 4;
+const USERNAME_MAX_LENGTH = 50;
+const EMAIL_MAX_LENGTH = 255;
+const PHONE_REGEX = /^[0-9\-+() ]{8,20}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const RESIDENCE_OPTIONS: { id: ResidenceType; label: string }[] = [
   { id: "ONE_ROOM", label: "원룸" },
   { id: "OFFICETEL", label: "오피스텔" },
@@ -67,7 +75,13 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const normalizedPhone = useMemo(() => phoneNumber.replace(/[^0-9]/g, ""), [phoneNumber]);
+  const trimmedUsername = useMemo(() => username.trim(), [username]);
+  const trimmedEmail = useMemo(() => email.trim(), [email]);
+  const trimmedPhone = useMemo(() => phoneNumber.trim(), [phoneNumber]);
+  const isUsernameFormatValid = trimmedUsername.length >= USERNAME_MIN_LENGTH && trimmedUsername.length <= USERNAME_MAX_LENGTH;
+  const isPasswordFormatValid = password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH;
+  const isEmailFormatValid = trimmedEmail.length <= EMAIL_MAX_LENGTH && EMAIL_REGEX.test(trimmedEmail);
+  const isPhoneFormatValid = PHONE_REGEX.test(trimmedPhone);
 
   useEffect(() => {
     if (consent === "1") return;
@@ -76,38 +90,56 @@ export default function Signup() {
   }, [consent]);
 
   const handleCheckUsername = async () => {
-    if (!username.trim()) return Alert.alert("입력 필요", "아이디를 입력해주세요.");
+    if (!trimmedUsername) return Alert.alert("입력 필요", "아이디를 입력해주세요.");
+    if (!isUsernameFormatValid) return Alert.alert("형식 확인", "아이디는 4~50자로 입력해주세요.");
     try {
-      const ok = await checkUsernameAvailable(username.trim());
+      const ok = await checkUsernameAvailable(trimmedUsername);
       setUsernameChecked(ok);
       if (ok) Alert.alert("확인", "사용 가능한 아이디입니다.");
     } catch { Alert.alert("오류", "중복검사 실패"); }
   };
 
   const handleCheckPhone = async () => {
-    if (!normalizedPhone) return Alert.alert("입력 필요", "휴대폰 번호를 입력해주세요.");
+    if (!trimmedPhone) return Alert.alert("입력 필요", "휴대폰 번호를 입력해주세요.");
+    if (!isPhoneFormatValid) return Alert.alert("형식 확인", "전화번호는 8~20자이며 숫자, 하이픈(-), +, 괄호, 공백만 사용할 수 있습니다.");
     try {
-      const ok = await checkPhoneAvailable(normalizedPhone);
+      const ok = await checkPhoneAvailable(trimmedPhone);
       setPhoneChecked(ok);
       if (ok) Alert.alert("확인", "사용 가능한 번호입니다.");
     } catch { Alert.alert("오류", "중복검사 실패"); }
   };
 
   const handleCheckEmail = async () => {
-    if (!email.trim()) return Alert.alert("입력 필요", "이메일을 입력해주세요.");
+    if (!trimmedEmail) return Alert.alert("입력 필요", "이메일을 입력해주세요.");
+    if (!isEmailFormatValid) return Alert.alert("형식 확인", "이메일 형식을 확인해주세요. 예: user@example.com");
     try {
-      const ok = await checkEmailAvailable(email.trim());
+      const ok = await checkEmailAvailable(trimmedEmail);
       setEmailChecked(ok);
       setEmailCodeSent(false);
       setEmailVerified(false);
-      if (ok) Alert.alert("확인", "사용 가능한 이메일입니다.");
-    } catch { Alert.alert("오류", "중복검사 실패"); }
+
+      if (ok) {
+        Alert.alert("확인", "사용 가능한 이메일입니다. 인증코드를 발송할 수 있습니다.");
+      } else {
+        Alert.alert("확인", "이미 사용 중인 이메일입니다. 다른 이메일을 입력해주세요.");
+      }
+    } catch (error: any) {
+      console.error("[회원가입] 이메일 중복검사 처리 실패:", {
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data,
+      });
+      Alert.alert(
+        "중복검사 실패",
+        "서버 응답은 콘솔 로그에 출력했습니다. 백엔드 응답 형식과 프론트 파싱 값을 확인해주세요."
+      );
+    }
   };
 
   const handleSendEmailCode = async () => {
     if (emailChecked !== true) return Alert.alert("알림", "이메일 중복검사를 먼저 완료해주세요.");
     try {
-      await sendEmailVerificationCode(email.trim());
+      await sendEmailVerificationCode(trimmedEmail);
       setEmailCodeSent(true);
       Alert.alert("인증코드 발송", "이메일로 인증코드가 발송되었습니다.");
     } catch { Alert.alert("오류", "발송에 실패했습니다."); }
@@ -116,13 +148,17 @@ export default function Signup() {
   const handleVerifyEmail = async () => {
     if (!verificationCode.trim()) return Alert.alert("입력 필요", "인증코드를 입력해주세요.");
     try {
-      const ok = await verifyEmailCode(email.trim(), verificationCode.trim());
+      const ok = await verifyEmailCode(trimmedEmail, verificationCode.trim());
       setEmailVerified(ok);
       if (ok) Alert.alert("이메일 인증", "인증이 완료되었습니다.");
     } catch { Alert.alert("오류", "인증 실패"); }
   };
 
   const handleSignup = async () => {
+    if (!isUsernameFormatValid) return Alert.alert("알림", "아이디 형식을 확인해주세요.");
+    if (!isPhoneFormatValid) return Alert.alert("알림", "휴대폰 번호 형식을 확인해주세요.");
+    if (!isEmailFormatValid) return Alert.alert("알림", "이메일 형식을 확인해주세요.");
+    if (!isPasswordFormatValid) return Alert.alert("알림", "비밀번호는 8~72자로 입력해주세요.");
     if (usernameChecked !== true) return Alert.alert("알림", "아이디 중복확인을 해주세요.");
     if (phoneChecked !== true) return Alert.alert("알림", "휴대폰 중복확인을 해주세요.");
     if (emailVerified !== true) return Alert.alert("알림", "이메일 인증을 완료해주세요.");
@@ -131,10 +167,10 @@ export default function Signup() {
     try {
       setIsSubmitting(true);
       await signup({
-        username: username.trim(),
-        email: email.trim().toLowerCase(),
+        username: trimmedUsername,
+        email: trimmedEmail.toLowerCase(),
         password,
-        phoneNumber: normalizedPhone,
+        phoneNumber: trimmedPhone,
         residenceType,
         rentType,
         address,
@@ -183,6 +219,9 @@ export default function Signup() {
                 <Text style={styles.inlineButtonText}>중복확인</Text>
               </Pressable>
             </View>
+            <Text style={[styles.helperText, username !== "" && !isUsernameFormatValid && styles.helperTextError]}>
+              4~50자로 입력해주세요.
+            </Text>
             {usernameChecked !== null && (
               <Text style={[styles.statusText, { color: usernameChecked ? "#10b981" : "#ef4444" }]}>
                 {usernameChecked ? "✓ 사용 가능한 아이디입니다." : "✕ 이미 사용 중인 아이디입니다."}
@@ -196,7 +235,7 @@ export default function Signup() {
             <View style={styles.row}>
               <TextInput
                 style={styles.flexInput}
-                placeholder="숫자만 입력 (01012345678)"
+                placeholder="01012345678 또는 010-1234-5678"
                 value={phoneNumber}
                 onChangeText={(t) => { setPhoneNumber(t); setPhoneChecked(null); }}
                 keyboardType="phone-pad"
@@ -205,6 +244,9 @@ export default function Signup() {
                 <Text style={styles.inlineButtonText}>중복확인</Text>
               </Pressable>
             </View>
+            <Text style={[styles.helperText, phoneNumber !== "" && !isPhoneFormatValid && styles.helperTextError]}>
+              8~20자, 숫자/하이픈(-)/+/( )/공백만 사용할 수 있습니다.
+            </Text>
           </View>
 
           {/* 이메일 & 인증 */}
@@ -223,6 +265,9 @@ export default function Signup() {
                 <Text style={styles.inlineButtonText}>중복확인</Text>
               </Pressable>
             </View>
+            <Text style={[styles.helperText, email !== "" && !isEmailFormatValid && styles.helperTextError]}>
+              이메일 형식으로 입력해주세요. 예: user@example.com
+            </Text>
             
             {/* [수정] 버튼을 조건부 렌더링이 아닌 '활성화/비활성화' 방식으로 변경하여 영역 고정 */}
             <Pressable 
@@ -260,6 +305,11 @@ export default function Signup() {
               </Pressable>
             </View>
 
+            {emailChecked !== null && !emailVerified && (
+              <Text style={[styles.statusText, { color: emailChecked ? "#10b981" : "#ef4444" }]}>
+                {emailChecked ? "✓ 사용 가능한 이메일입니다." : "✕ 이미 사용 중이거나 사용할 수 없는 이메일입니다."}
+              </Text>
+            )}
             {emailVerified && <Text style={[styles.statusText, {color: "#10b981"}]}>✓ 이메일 인증이 완료되었습니다.</Text>}
             {emailCodeSent && !emailVerified && <Text style={[styles.statusText, {color: MAIN_BLUE}]}>ⓘ 메일로 전송된 코드를 입력해 주세요.</Text>}
           </View>
@@ -279,6 +329,9 @@ export default function Signup() {
                 <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#94a3b8" />
               </Pressable>
             </View>
+            <Text style={[styles.helperText, password !== "" && !isPasswordFormatValid && styles.helperTextError]}>
+              8~72자로 입력해주세요.
+            </Text>
             <View style={[styles.passwordWrapper, { marginTop: 10 }]}>
               <TextInput
                 style={styles.passwordInput}
@@ -383,6 +436,8 @@ const styles = StyleSheet.create({
   passwordInput: { height: 56, backgroundColor: "#f8fafc", borderRadius: 16, paddingHorizontal: 16, borderWidth: 1, borderColor: "#e2e8f0", fontSize: 15, paddingRight: 50 },
   eyeIcon: { position: 'absolute', right: 16, top: 18 },
   statusText: { fontSize: 12, fontWeight: "600", marginTop: 6, marginLeft: 6 },
+  helperText: { fontSize: 12, color: "#94a3b8", marginTop: 6, marginLeft: 6, lineHeight: 18 },
+  helperTextError: { color: "#ef4444", fontWeight: "700" },
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: "#f1f5f9", minWidth: '30%', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
   chipActive: { backgroundColor: MAIN_BLUE, borderColor: MAIN_BLUE },

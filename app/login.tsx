@@ -15,8 +15,7 @@ import { useRouter, Stack } from "expo-router";
 
 // [원본 API 및 스토리지 로직 유지]
 import { login } from "../src/api/auth";
-import { detectAdmin } from "../src/api/admin";
-import { saveAccessToken, saveDevToken, saveIsAdmin } from "../src/store/tokenStorage";
+import { markDustIntroSeen, saveAccessToken, shouldShowDustIntro } from "../src/store/tokenStorage";
 
 const MAIN_BLUE = "#3b82f6";
 
@@ -45,23 +44,18 @@ export default function Login() {
       
       await saveAccessToken(data.accessToken);
 
-      // [원본 로직] 관리자 여부 확인 및 저장
-      const isAdmin = await detectAdmin();
-      await saveIsAdmin(isAdmin);
+      const trimmedUsername = username.trim();
+      const showIntro = await shouldShowDustIntro(trimmedUsername);
+      if (showIntro) {
+        await markDustIntroSeen(trimmedUsername);
+      }
 
-      // 메인으로 이동
-      router.replace("/(tabs)?intro=1");
+      router.replace(showIntro ? "/(tabs)?intro=1" : "/(tabs)");
     } catch (e: any) {
       Alert.alert("로그인 실패", "아이디/비밀번호 또는 서버 상태를 확인해주세요.");
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  // --- [원본 로직] DEV 슈퍼계정 로그인 ---
-  async function handleDevLogin() {
-    await saveDevToken();
-    router.replace("/(tabs)?intro=1");
   }
 
   return (
@@ -140,12 +134,6 @@ export default function Login() {
           >
             <Text style={styles.signupBtnText}>회원가입</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleDevLogin} style={styles.devLoginBtn}>
-            <Text style={styles.devLoginText}>
-              개발자 모드로 로그인
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* 하단 보조 링크 */}
@@ -222,9 +210,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   signupBtnText: { color: MAIN_BLUE, fontSize: 16, fontWeight: "600" },
-  devLoginBtn: { marginTop: 10, alignItems: "center" },
-  devLoginText: { color: "#9ca3af", fontSize: 12, textDecorationLine: "underline" },
-
   footerLinks: { marginTop: 30, flexDirection: "row", justifyContent: "center" },
   footerLinkText: { fontSize: 13, color: "#9ca3af", fontWeight: "400" },
 });

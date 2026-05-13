@@ -21,9 +21,9 @@ function issueTypeLabel(t: IssueType) {
 }
 
 /**
- * 네이버 지역검색 결과가 실제로 풍부하게 나오는 "복합명사" 키워드 매핑.
+ * 카카오 지역검색 결과가 실제로 풍부하게 나오는 "복합명사" 키워드 매핑.
  *  - 공백이 붙으면 토큰 수가 늘어나 매칭 확률이 급격히 떨어짐 → 붙여쓰기.
- *  - "업체" 접미사는 네이버에서 일반적인 상호/카테고리명과 겹쳐서 효과가 낮음. 대신 구체 업무명 사용.
+ *  - "업체" 접미사는 카카오에서 일반적인 상호/카테고리명과 겹쳐서 효과가 낮음. 대신 구체 업무명 사용.
  */
 function issueTypeSearchKeyword(t: IssueType): string {
   const map: Record<string, string> = {
@@ -48,6 +48,11 @@ function formatDistanceKm(distanceKm?: number | null) {
   if (distanceKm == null || Number.isNaN(distanceKm)) return "거리 정보 없음";
   if (distanceKm < 1) return `${Math.round(distanceKm * 1000)}m`;
   return `${distanceKm.toFixed(1)}km`;
+}
+
+function formatRating(avgRating?: number | null) {
+  if (avgRating === null || avgRating === undefined || Number.isNaN(avgRating)) return "리뷰 없음";
+  return avgRating.toFixed(1);
 }
 
 export default function Expert() {
@@ -111,7 +116,7 @@ export default function Expert() {
 
   // --- [업체 조회 로직 - 개편] ---
   // 설계 원칙:
-  //  - 관리자 기능으로 등록되는 업체 = 제휴 업체(isPartner=true).
+  //  - 백엔드에 등록된 업체 = 제휴 업체(isPartner=true).
   //  - 외부 지도 검색 결과 = 일반 업체(isPartner=false).
   //  - GPS 가 있으면 백엔드 /api/companies/nearby 가 두 소스를 합쳐서
   //    "제휴 우선 → 거리순" 으로 정렬해 반환한다. 프론트는 그 결과만 그대로 보여주면 된다.
@@ -125,7 +130,7 @@ export default function Expert() {
       if (userCoordinates) {
         // 지역명을 강하게 붙이면 좌표/반경 기반 검색에서 오히려 0건이 나는 케이스가 있어
         // 이슈 중심 키워드만 전달하고, 백엔드가 후보 키워드/반경 fallback을 적용한다.
-        const keyword = issueTypeSearchKeyword(resolvedIssueType);
+        const keyword = `${region} ${issueTypeSearchKeyword(resolvedIssueType)}`.trim();
         const nearbyVendors = await listNearbyCompanies({
           latitude: userCoordinates.latitude,
           longitude: userCoordinates.longitude,
@@ -193,7 +198,7 @@ export default function Expert() {
     () => vendorsWithDistance.filter((v) => v.isPartner).length,
     [vendorsWithDistance],
   );
-  const naverCount = vendorsWithDistance.length - partnerCount;
+  const externalCount = vendorsWithDistance.length - partnerCount;
 
   if (loading || !info) return <ScreenState loading />;
 
@@ -293,7 +298,7 @@ export default function Expert() {
                 <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
                 {vendorsWithDistance.length > 0 && (
                   <Text style={styles.listSubCount}>
-                    제휴 {partnerCount}곳 · 외부검색 {naverCount}곳
+                    제휴 {partnerCount}곳 · 외부검색 {externalCount}곳
                   </Text>
                 )}
               </View>
@@ -340,14 +345,31 @@ export default function Expert() {
                             <Text style={styles.partnerBadgeText}>제휴</Text>
                           </View>
                         ) : (
-                          <View style={styles.naverBadge}>
-                            <Text style={styles.naverBadgeText}>외부</Text>
+                          <View style={styles.externalBadge}>
+                            <Text style={styles.externalBadgeText}>외부</Text>
                           </View>
                         )}
+                        <Pressable
+                          onPress={() => router.push({
+                            pathname: "/expert-reviews/[vendorId]",
+                            params: {
+                              vendorId: vendor.companyId ?? vendor.kakaoPlaceId ?? vendor.id,
+                              vendorName: vendor.name,
+                              companyId: vendor.companyId,
+                              kakaoPlaceId: vendor.kakaoPlaceId,
+                            },
+                          })}
+                          style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
+                          hitSlop={8}
+                        >
+                          <FontAwesome name="star" size={12} color="#fff" />
+                          <Text style={styles.reviewButtonText}>리뷰 보기</Text>
+                          <Feather name="chevron-right" size={13} color="#fff" />
+                        </Pressable>
                       </View>
                       <View style={styles.ratingRow}>
                         <FontAwesome name="star" size={14} color="#f59e0b" />
-                        <Text style={styles.ratingText}>{vendor.rating.toFixed(1)}</Text>
+                        <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
                         <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
                         {vendor.distanceKm != null && (
                           <Text style={styles.distanceBadge}>
@@ -373,7 +395,14 @@ export default function Expert() {
                       pathname: "/expert-booking", 
                       params: { 
                         historyId: historyId ? String(historyId) : undefined, 
-                        vendorId: vendor.id, 
+                        vendorId: vendor.id,
+                        companyId: vendor.companyId,
+                        kakaoPlaceId: vendor.kakaoPlaceId,
+                        kakaoPlaceName: vendor.name,
+                        kakaoPlacePhone: vendor.phone,
+                        kakaoPlaceAddress: vendor.addressLine,
+                        kakaoPlaceLat: vendor.latitude != null ? String(vendor.latitude) : undefined,
+                        kakaoPlaceLng: vendor.longitude != null ? String(vendor.longitude) : undefined,
                         vendorName: vendor.name, 
                         vendorPhone: vendor.phone, 
                         vendorIntro: vendor.intro, 
@@ -498,13 +527,31 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   partnerBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
-  naverBadge: {
+  externalBadge: {
     backgroundColor: "#f1f5f9",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
-  naverBadgeText: { color: "#64748b", fontSize: 11, fontWeight: "700" },
+  externalBadgeText: { color: "#64748b", fontSize: 11, fontWeight: "700" },
+  reviewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: MAIN_BLUE,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    shadowColor: MAIN_BLUE,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  reviewButtonPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
+  reviewButtonText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   ratingText: { fontSize: 14, fontWeight: "700", color: "#1e293b" },
   reviewCount: { fontSize: 12, color: "#94a3b8" },
