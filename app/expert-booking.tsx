@@ -75,21 +75,28 @@ export default function ExpertBooking() {
   // --- [원본 데이터 자동 완성 로직] ---
   useEffect(() => {
     async function fillDefaults() {
+      // 1) 사용자 기본 정보 - 실패 시 알림
       try {
         const me = await getMe();
         setCustomerName(me.username ?? "");
         setPhoneNumber(me.phoneNumber ?? "");
         setAddress(me.address ?? "");
+      } catch {
+        Alert.alert("기본값 불러오기 실패", "사용자 정보를 확인해주세요.");
+      }
 
-        if (historyId) {
+      // 2) 진단 이력 - 실패해도 조용히 처리 (historyId가 diagnosisResultId일 수 있음)
+      if (historyId) {
+        try {
           const detail = await getHistoryDetail(String(historyId));
           setIssueSummary(`${issueLabel(detail.issueType)} / 위험도 ${detail.riskScore}%`);
           setRequestNote(`historyId=${detail.id}`);
-        } else if (issueType) {
-          setIssueSummary(issueLabel(issueType));
+        } catch {
+          // API 실패 시 issueType 파라미터로 대체
+          if (issueType) setIssueSummary(issueLabel(issueType));
         }
-      } catch {
-        Alert.alert("기본값 불러오기 실패", "사용자 정보를 확인해주세요.");
+      } else if (issueType) {
+        setIssueSummary(issueLabel(issueType));
       }
     }
     fillDefaults();

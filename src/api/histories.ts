@@ -55,7 +55,17 @@ function toNumberOrUndefined(value: any): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+
+/** localhost URL을 실제 서버 주소로 교체 (도커 내부 URL 대응) */
+function normalizeUrl(url: string): string {
+  if (!url) return url;
+  return url.replace(/^https?:\/\/localhost(:\d+)?/, API_BASE.replace(/\/$/, ""));
+}
+
 function pickImageUris(raw: any): string[] {
+  // 단수 imageUrl (새 파이프라인 DiagnosisResult.imageUrl) 처리
+  if (raw?.imageUrl && typeof raw.imageUrl === "string") return [normalizeUrl(raw.imageUrl)];
   const direct = stringList(raw?.imageUris ?? raw?.imageUrls ?? raw?.diagnosisImageUrls ?? raw?.beforeImageUrls ?? raw?.diagnosis?.beforeImageUrls);
   if (direct.length > 0) return direct;
 

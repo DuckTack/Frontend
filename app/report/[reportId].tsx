@@ -20,7 +20,7 @@ import * as ImagePicker from "expo-image-picker";
 import ScreenState from "../../src/components/ScreenState";
 import { getMe, Me } from "../../src/api/users";
 import { getHistoryDetail, HistoryDetail } from "../../src/api/histories";
-import { getCachedDiagnosisImages, type CachedDiagnosisImages } from "../../src/api/diagnosis";
+// getCachedDiagnosisImages 는 미구현 상태이므로 제거 (diagnosis.ts에 없음)
 import {
   getPdfUrl,
   saveReportDraft,
@@ -77,7 +77,7 @@ export default function ReportDetail() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [history, setHistory] = useState<HistoryDetail | null>(null);
-  const [cachedDiagnosisImages, setCachedDiagnosisImages] = useState<CachedDiagnosisImages | null>(null);
+  const [cachedDiagnosisImages, setCachedDiagnosisImages] = useState<{ imageUris?: string[]; imageKeys?: string[] } | null>(null);
   const [draft, setDraft] = useState<ReportDraft>(createEmptyDraft());
 
   const reportBase = useMemo(() => {
@@ -109,16 +109,15 @@ export default function ReportDetail() {
       setLoading(true);
       if (!reportId) return;
 
-      const [meData, historyData, draftData, cachedImages] = await Promise.all([
+      const [meData, historyData, draftData] = await Promise.all([
         getMe().catch(() => null),
         getHistoryDetail(String(reportId)).catch(() => null),
         loadReportDraft(String(reportId)).catch(() => null),
-        getCachedDiagnosisImages(String(reportId)).catch(() => null),
       ]);
 
       setMe(meData);
       setHistory(historyData);
-      setCachedDiagnosisImages(cachedImages);
+      setCachedDiagnosisImages(null); // 미구현 API — history.imageUris 로 대체됨
       setDraft(draftData ?? createEmptyDraft());
     } catch (e) {
       console.error("데이터 로딩 실패:", e);

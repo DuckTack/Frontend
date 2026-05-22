@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Platform } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -69,6 +69,8 @@ export default function Expert() {
   const [sortAscending, setSortAscending] = useState(true);
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const [requestingLocation, setRequestingLocation] = useState(false);
+  // ref로 최신 좌표를 항상 읽을 수 있게 유지 (loadVendors 클로저 stale 문제 방지)
+  const userCoordinatesRef = useRef<Coordinates | null>(null);
 
   // --- [원본 데이터 로딩 로직] ---
   useEffect(() => {
@@ -76,12 +78,21 @@ export default function Expert() {
       try {
         setLoading(true);
         let t: IssueType = (issueType as IssueType) || "MOLD";
-        if (historyId) {
-          const h = await getHistoryDetail(String(historyId));
-          t = h.issueType;
+        if (historyId && !issueType) {
+          // issueType이 없을 때만 히스토리 API 호출 시도
+          try {
+            const h = await getHistoryDetail(String(historyId));
+            t = h.issueType;
+          } catch {
+            // diagnosisId를 historyId로 넘긴 경우 등 API 실패 시 기본값 유지
+          }
         }
         const i = await getExpertInfo(t);
         setResolvedIssueType(t);
+        setInfo(i);
+      } catch {
+        // getExpertInfo는 하드코딩이라 실패 없지만 안전망
+        const i = await getExpertInfo("MOLD");
         setInfo(i);
       } finally {
         setLoading(false);
@@ -90,6 +101,11 @@ export default function Expert() {
     load();
   }, [historyId, issueType]);
 
+  // userCoordinates 상태 변경 시 ref 동기화
+  useEffect(() => {
+    userCoordinatesRef.current = userCoordinates;
+  }, [userCoordinates]);
+
   // --- [원본 위치 획득 로직] ---
   async function handleGetCurrentLocation() {
     try {
@@ -97,7 +113,7 @@ export default function Expert() {
       const coords = await requestCurrentCoordinates();
       setUserCoordinates(coords);
       if (selectedRegion) {
-        await loadVendors(selectedRegion, sortKey, sortAscending);
+        await loadVendors(selectedRegion, sortKey, sortAscending, coords); // coords 직접 전달
       }
       Alert.alert("위치 확인 완료", "가까운 업체 순 거리 정보가 업데이트되었습니다.");
     } catch (error: any) {
@@ -122,18 +138,19 @@ export default function Expert() {
   //    "제휴 우선 → 거리순" 으로 정렬해 반환한다. 프론트는 그 결과만 그대로 보여주면 된다.
   //  - GPS 가 없으면 /api/experts/vendors (제휴 업체 전용) 로 폴백한다.
   //  - 키워드는 이슈 중심으로 전달하고, 백엔드가 반경/보강 검색을 수행한다.
-  const loadVendors = useCallback(async (region: string, nextSortKey = sortKey, nextAscending = sortAscending) => {
+  // coords 파라미터를 명시적으로 받아서 userCoordinates 클로저 의존성 제거
+  const loadVendors = useCallback(async (region: string, nextSortKey = sortKey, nextAscending = sortAscending, coords = userCoordinatesRef.current) => {
     try {
       setVendorsLoading(true);
 
       // GPS 있음 → 외부검색+제휴 통합 엔드포인트 사용 (백엔드가 정렬/보강 검색 수행)
-      if (userCoordinates) {
+      if (coords) {
         // 지역명을 강하게 붙이면 좌표/반경 기반 검색에서 오히려 0건이 나는 케이스가 있어
         // 이슈 중심 키워드만 전달하고, 백엔드가 후보 키워드/반경 fallback을 적용한다.
         const keyword = `${region} ${issueTypeSearchKeyword(resolvedIssueType)}`.trim();
         const nearbyVendors = await listNearbyCompanies({
-          latitude: userCoordinates.latitude,
-          longitude: userCoordinates.longitude,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
           region,
           keyword,
         });
@@ -174,7 +191,7 @@ export default function Expert() {
     } finally {
       setVendorsLoading(false);
     }
-  }, [resolvedIssueType, sortKey, sortAscending, userCoordinates]);
+  }, [resolvedIssueType, sortKey, sortAscending]); // userCoordinates는 파라미터로 받으므로 deps 제외
 
   useFocusEffect(
     useCallback(() => {
@@ -357,6 +374,10 @@ export default function Expert() {
                               vendorName: vendor.name,
                               companyId: vendor.companyId,
                               kakaoPlaceId: vendor.kakaoPlaceId,
+                              kakaoPlacePhone: vendor.phone,
+                              kakaoPlaceAddress: vendor.addressLine,
+                              kakaoPlaceLat: vendor.latitude != null ? String(vendor.latitude) : undefined,
+                              kakaoPlaceLng: vendor.longitude != null ? String(vendor.longitude) : undefined,
                             },
                           })}
                           style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
