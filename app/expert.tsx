@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Platform } from "react-native";
+import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Platform, Linking } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather, MaterialCommunityIcons, FontAwesome } from "@expo/vector-icons";
@@ -55,9 +55,49 @@ function formatRating(avgRating?: number | null) {
   return avgRating.toFixed(1);
 }
 
+function cleanPhoneNumber(phone?: string | null) {
+  if (!phone) return "";
+  return String(phone).replace(/[^0-9+]/g, "");
+}
+
+async function callVendor(phone?: string | null) {
+  const cleanPhone = cleanPhoneNumber(phone);
+
+  if (!cleanPhone) {
+    Alert.alert("전화번호 없음", "이 업체는 전화번호가 제공되지 않았습니다.");
+    return;
+  }
+
+  try {
+    await Linking.openURL(`tel:${cleanPhone}`);
+  } catch {
+    Alert.alert("전화 연결 실패", "이 기기에서 전화 연결을 열 수 없습니다.");
+  }
+}
+
+async function openPlaceUrl(placeUrl?: string | null) {
+  if (!placeUrl) {
+    Alert.alert("장소 정보 없음", "카카오 장소 페이지가 제공되지 않았습니다.");
+    return;
+  }
+
+  try {
+    const canOpen = await Linking.canOpenURL(placeUrl);
+
+    if (!canOpen) {
+      Alert.alert("연결 실패", "카카오 장소 페이지를 열 수 없습니다.");
+      return;
+    }
+
+    await Linking.openURL(placeUrl);
+  } catch {
+    Alert.alert("연결 실패", "카카오 장소 페이지를 열 수 없습니다.");
+  }
+}
+
 export default function Expert() {
   const { historyId, issueType } = useLocalSearchParams<{ historyId?: string; issueType?: string }>();
-  
+
   // --- [원본 상태 관리 로직] ---
   const [loading, setLoading] = useState(true);
   const [vendorsLoading, setVendorsLoading] = useState(false);
@@ -194,11 +234,11 @@ export default function Expert() {
   }, [resolvedIssueType, sortKey, sortAscending]); // userCoordinates는 파라미터로 받으므로 deps 제외
 
   useFocusEffect(
-    useCallback(() => {
-      if (selectedRegion) {
-        loadVendors(selectedRegion, sortKey, sortAscending);
-      }
-    }, [selectedRegion, sortKey, sortAscending, loadVendors])
+      useCallback(() => {
+        if (selectedRegion) {
+          loadVendors(selectedRegion, sortKey, sortAscending);
+        }
+      }, [selectedRegion, sortKey, sortAscending, loadVendors])
   );
 
   const handleSortPress = (nextKey: ExpertVendorSort) => {
@@ -212,243 +252,259 @@ export default function Expert() {
 
   const vendorsWithDistance = useMemo(() => vendors, [vendors]);
   const partnerCount = useMemo(
-    () => vendorsWithDistance.filter((v) => v.isPartner).length,
-    [vendorsWithDistance],
+      () => vendorsWithDistance.filter((v) => v.isPartner).length,
+      [vendorsWithDistance],
   );
   const externalCount = vendorsWithDistance.length - partnerCount;
 
   if (loading || !info) return <ScreenState loading />;
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      
-      {/* 헤더 */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={20} color={MAIN_BLUE} />
-        </Pressable>
-        <Text style={styles.headerTitle}>전문가 매칭</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <View style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* 상단 섹션: 견적 정보 카드 */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoBadgeText}>전문가 수리 권장</Text>
-          </View>
-          <Text style={styles.mainTitle}>{issueTypeLabel(resolvedIssueType)} 수리 견적 안내</Text>
-
-          <View style={styles.estimateBox}>
-            <Text style={styles.estimateLabel}>예상 비용 범위</Text>
-            <Text style={styles.estimateValue}>{info.estimateRange}</Text>
-          </View>
-
-          {info.notes && info.notes.length > 0 && (
-            <View style={styles.notesSection}>
-              <Text style={styles.sectionSmallTitle}>안내 사항</Text>
-              {info.notes.map((n, i) => (
-                <View key={i} style={styles.bulletRow}>
-                  <Feather name="check" size={14} color={MAIN_BLUE} />
-                  <Text style={styles.bulletText}>{n}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+        {/* 헤더 */}
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Feather name="arrow-left" size={20} color={MAIN_BLUE} />
+          </Pressable>
+          <Text style={styles.headerTitle}>전문가 매칭</Text>
+          <View style={{ width: 40 }} />
         </View>
 
-        {/* 위치 확인 섹션 (디자인 적용) */}
-        <View style={styles.locationBox}>
-           <View style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+          {/* 상단 섹션: 견적 정보 카드 */}
+          <View style={styles.infoCard}>
+            <View style={styles.infoBadge}>
+              <Text style={styles.infoBadgeText}>전문가 수리 권장</Text>
+            </View>
+            <Text style={styles.mainTitle}>{issueTypeLabel(resolvedIssueType)} 수리 견적 안내</Text>
+
+            <View style={styles.estimateBox}>
+              <Text style={styles.estimateLabel}>예상 비용 범위</Text>
+              <Text style={styles.estimateValue}>{info.estimateRange}</Text>
+            </View>
+
+            {info.notes && info.notes.length > 0 && (
+                <View style={styles.notesSection}>
+                  <Text style={styles.sectionSmallTitle}>안내 사항</Text>
+                  {info.notes.map((n, i) => (
+                      <View key={i} style={styles.bulletRow}>
+                        <Feather name="check" size={14} color={MAIN_BLUE} />
+                        <Text style={styles.bulletText}>{n}</Text>
+                      </View>
+                  ))}
+                </View>
+            )}
+          </View>
+
+          {/* 위치 확인 섹션 (디자인 적용) */}
+          <View style={styles.locationBox}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.locationTitle}>내 위치 기준 거리 보기</Text>
               <Text style={styles.locationDesc}>
                 {userCoordinates ? "현재 위치 확인 완료" : "업체와의 거리를 표시합니다."}
               </Text>
-           </View>
-           <Pressable 
-              onPress={handleGetCurrentLocation} 
-              disabled={requestingLocation}
-              style={[styles.locationBtn, userCoordinates && styles.locationBtnActive]}
-           >
-              <MaterialCommunityIcons 
-                name={requestingLocation ? "loading" : "target"} 
-                size={18} 
-                color={userCoordinates ? "#fff" : MAIN_BLUE} 
+            </View>
+            <Pressable
+                onPress={handleGetCurrentLocation}
+                disabled={requestingLocation}
+                style={[styles.locationBtn, userCoordinates && styles.locationBtnActive]}
+            >
+              <MaterialCommunityIcons
+                  name={requestingLocation ? "loading" : "target"}
+                  size={18}
+                  color={userCoordinates ? "#fff" : MAIN_BLUE}
               />
               <Text style={[styles.locationBtnText, userCoordinates && { color: "#fff" }]}>
                 {requestingLocation ? "확인중" : "위치 갱신"}
               </Text>
-           </Pressable>
-        </View>
-
-        {/* 지역 선택 섹션 */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Feather name="map-pin" size={18} color={MAIN_BLUE} />
-            <Text style={styles.sectionTitle}>지역 선택</Text>
+            </Pressable>
           </View>
-          <View style={styles.regionGrid}>
-            {VENDOR_REGIONS.map((region) => (
-              <Pressable
-                key={region}
-                onPress={() => {
-                  setSelectedRegion(region);
-                  setSortKey("price");
-                  setSortAscending(true);
-                  loadVendors(region, "price", true);
-                }}
-                style={[styles.regionChip, selectedRegion === region && styles.regionChipActive]}
-              >
-                <Text style={[styles.regionText, selectedRegion === region && styles.regionTextActive]}>{region}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
 
-        {/* 업체 리스트 섹션 */}
-        {selectedRegion ? (
-          <View style={styles.vendorSection}>
-            <View style={styles.listHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
-                {vendorsWithDistance.length > 0 && (
-                  <Text style={styles.listSubCount}>
-                    제휴 {partnerCount}곳 · 외부검색 {externalCount}곳
-                  </Text>
+          {/* 지역 선택 섹션 */}
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Feather name="map-pin" size={18} color={MAIN_BLUE} />
+              <Text style={styles.sectionTitle}>지역 선택</Text>
+            </View>
+            <View style={styles.regionGrid}>
+              {VENDOR_REGIONS.map((region) => (
+                  <Pressable
+                      key={region}
+                      onPress={() => {
+                        setSelectedRegion(region);
+                        setSortKey("price");
+                        setSortAscending(true);
+                        loadVendors(region, "price", true);
+                      }}
+                      style={[styles.regionChip, selectedRegion === region && styles.regionChipActive]}
+                  >
+                    <Text style={[styles.regionText, selectedRegion === region && styles.regionTextActive]}>{region}</Text>
+                  </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* 업체 리스트 섹션 */}
+          {selectedRegion ? (
+              <View style={styles.vendorSection}>
+                <View style={styles.listHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
+                    {vendorsWithDistance.length > 0 && (
+                        <Text style={styles.listSubCount}>
+                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳
+                        </Text>
+                    )}
+                  </View>
+                  <View style={styles.filterRow}>
+                    <Pressable onPress={() => handleSortPress("price")}>
+                      <Text style={[styles.filterText, sortKey === "price" && styles.filterActive]}>
+                        가격순{sortKey === "price" && (sortAscending ? "↑" : "↓")}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleSortPress("rating")}>
+                      <Text style={[styles.filterText, sortKey === "rating" && styles.filterActive]}>
+                        별점순{sortKey === "rating" && (sortAscending ? "↑" : "↓")}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {vendorsLoading ? (
+                    <View style={styles.emptyBox}>
+                      <Text style={styles.emptyText}>업체를 불러오는 중...</Text>
+                    </View>
+                ) : vendorsWithDistance.length === 0 ? (
+                    <View style={styles.emptyBox}>
+                      <Feather name="info" size={24} color="#94a3b8" />
+                      <Text style={styles.emptyText}>
+                        {userCoordinates
+                            ? "주변에 검색된 업체가 없습니다. 다른 지역/증상으로 다시 시도해 주세요."
+                            : "위치 갱신 버튼을 눌러 내 주변 업체를 검색해 주세요."}
+                      </Text>
+                    </View>
+                ) : (
+                    vendorsWithDistance.map((vendor) => (
+                        <View
+                            key={vendor.id}
+                            style={[styles.vendorCard, vendor.isPartner === true && !!vendor.companyId && styles.vendorCardPartner]}
+                        >
+                          <View style={styles.vendorMain}>
+                            <View style={styles.vendorInfo}>
+                              <View style={styles.vendorNameRow}>
+                                <Text style={styles.vendorName}>{vendor.name}</Text>
+                                {vendor.isPartner === true && !!vendor.companyId ? (
+                                    <View style={styles.partnerBadge}>
+                                      <FontAwesome name="handshake-o" size={11} color="#fff" />
+                                      <Text style={styles.partnerBadgeText}>제휴</Text>
+                                    </View>
+                                ) : (
+                                    <View style={styles.externalBadge}>
+                                      <Text style={styles.externalBadgeText}>외부</Text>
+                                    </View>
+                                )}
+                                <Pressable
+                                    onPress={() => router.push({
+                                      pathname: "/expert-reviews/[vendorId]",
+                                      params: {
+                                        vendorId: vendor.companyId ?? vendor.kakaoPlaceId ?? vendor.id,
+                                        vendorName: vendor.name,
+                                        companyId: vendor.companyId,
+                                        kakaoPlaceId: vendor.kakaoPlaceId,
+                                        kakaoPlacePhone: vendor.phone,
+                                        kakaoPlaceAddress: vendor.addressLine,
+                                        kakaoPlaceLat: vendor.latitude != null ? String(vendor.latitude) : undefined,
+                                        kakaoPlaceLng: vendor.longitude != null ? String(vendor.longitude) : undefined,
+                                        readOnly: "true",
+                                        from: "expert",
+                                      },
+                                    } as any)}
+                                    style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
+                                    hitSlop={8}
+                                >
+                                  <FontAwesome name="star" size={12} color="#fff" />
+                                  <Text style={styles.reviewButtonText}>리뷰 보기</Text>
+                                  <Feather name="chevron-right" size={13} color="#fff" />
+                                </Pressable>
+                              </View>
+                              <View style={styles.ratingRow}>
+                                <FontAwesome name="star" size={14} color="#f59e0b" />
+                                <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
+                                <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
+                                {vendor.distanceKm != null && (
+                                    <Text style={styles.distanceBadge}>
+                                      {formatDistanceKm(vendor.distanceKm)}
+                                    </Text>
+                                )}
+                              </View>
+                            </View>
+                            <Text style={styles.vendorPrice}>{formatPrice(vendor.minPrice, vendor.maxPrice)}</Text>
+                          </View>
+
+                          {vendor.intro ? (
+                              <Text style={styles.vendorIntro} numberOfLines={2}>{vendor.intro}</Text>
+                          ) : null}
+                          {vendor.addressLine ? (
+                              <Text style={styles.coverageText}>주소: {vendor.addressLine}</Text>
+                          ) : vendor.coverageAreas.length > 0 ? (
+                              <Text style={styles.coverageText}>활동 지역: {vendor.coverageAreas.join(", ")}</Text>
+                          ) : null}
+
+                          {vendor.isPartner === true && !!vendor.companyId ? (
+                              <Pressable
+                                  onPress={() => router.push({
+                                    pathname: "/expert-booking",
+                                    params: {
+                                      historyId: historyId ? String(historyId) : undefined,
+                                      vendorId: vendor.companyId,
+                                      companyId: vendor.companyId,
+                                      vendorName: vendor.name,
+                                      vendorPhone: vendor.phone,
+                                      vendorIntro: vendor.intro,
+                                      vendorMinPrice: String(vendor.minPrice),
+                                      issueType: resolvedIssueType,
+                                    },
+                                  })}
+                                  style={styles.bookBtn}
+                              >
+                                <Text style={styles.bookBtnText}>예약 페이지로 이동</Text>
+                                <Feather name="chevron-right" size={16} color="#fff" />
+                              </Pressable>
+                          ) : (
+                              <View style={styles.externalActions}>
+                                <Pressable
+                                    onPress={() => callVendor(vendor.phone)}
+                                    style={styles.callBtn}
+                                >
+                                  <Feather name="phone" size={15} color="#fff" />
+                                  <Text style={styles.callBtnText}>전화 문의</Text>
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={() => openPlaceUrl((vendor as any).placeUrl ?? (vendor.kakaoPlaceId ? `https://place.map.kakao.com/${vendor.kakaoPlaceId}` : undefined))}
+                                    style={styles.kakaoBtn}
+                                >
+                                  <Text style={styles.kakaoBtnText}>카카오에서 보기</Text>
+                                  <Feather name="external-link" size={15} color="#1e293b" />
+                                </Pressable>
+                              </View>
+                          )}
+                        </View>
+                    ))
                 )}
               </View>
-              <View style={styles.filterRow}>
-                <Pressable onPress={() => handleSortPress("price")}>
-                  <Text style={[styles.filterText, sortKey === "price" && styles.filterActive]}>
-                    가격순{sortKey === "price" && (sortAscending ? "↑" : "↓")}
-                  </Text>
-                </Pressable>
-                <Pressable onPress={() => handleSortPress("rating")}>
-                  <Text style={[styles.filterText, sortKey === "rating" && styles.filterActive]}>
-                    별점순{sortKey === "rating" && (sortAscending ? "↑" : "↓")}
-                  </Text>
-                </Pressable>
+          ) : (
+              <View style={styles.guideBox}>
+                <MaterialCommunityIcons name="gesture-tap" size={32} color={MAIN_BLUE} />
+                <Text style={styles.guideText}>지역을 선택하시면{"\n"}가까운 전문 업체를 추천해 드립니다.</Text>
               </View>
-            </View>
-
-            {vendorsLoading ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyText}>업체를 불러오는 중...</Text>
-              </View>
-            ) : vendorsWithDistance.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Feather name="info" size={24} color="#94a3b8" />
-                <Text style={styles.emptyText}>
-                  {userCoordinates
-                    ? "주변에 검색된 업체가 없습니다. 다른 지역/증상으로 다시 시도해 주세요."
-                    : "위치 갱신 버튼을 눌러 내 주변 업체를 검색해 주세요."}
-                </Text>
-              </View>
-            ) : (
-              vendorsWithDistance.map((vendor) => (
-                <View
-                  key={vendor.id}
-                  style={[styles.vendorCard, vendor.isPartner && styles.vendorCardPartner]}
-                >
-                  <View style={styles.vendorMain}>
-                    <View style={styles.vendorInfo}>
-                      <View style={styles.vendorNameRow}>
-                        <Text style={styles.vendorName}>{vendor.name}</Text>
-                        {vendor.isPartner ? (
-                          <View style={styles.partnerBadge}>
-                            <FontAwesome name="handshake-o" size={11} color="#fff" />
-                            <Text style={styles.partnerBadgeText}>제휴</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.externalBadge}>
-                            <Text style={styles.externalBadgeText}>외부</Text>
-                          </View>
-                        )}
-                        <Pressable
-                          onPress={() => router.push({
-                            pathname: "/expert-reviews/[vendorId]",
-                            params: {
-                              vendorId: vendor.companyId ?? vendor.kakaoPlaceId ?? vendor.id,
-                              vendorName: vendor.name,
-                              companyId: vendor.companyId,
-                              kakaoPlaceId: vendor.kakaoPlaceId,
-                              kakaoPlacePhone: vendor.phone,
-                              kakaoPlaceAddress: vendor.addressLine,
-                              kakaoPlaceLat: vendor.latitude != null ? String(vendor.latitude) : undefined,
-                              kakaoPlaceLng: vendor.longitude != null ? String(vendor.longitude) : undefined,
-                            },
-                          })}
-                          style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
-                          hitSlop={8}
-                        >
-                          <FontAwesome name="star" size={12} color="#fff" />
-                          <Text style={styles.reviewButtonText}>리뷰 보기</Text>
-                          <Feather name="chevron-right" size={13} color="#fff" />
-                        </Pressable>
-                      </View>
-                      <View style={styles.ratingRow}>
-                        <FontAwesome name="star" size={14} color="#f59e0b" />
-                        <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
-                        <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
-                        {vendor.distanceKm != null && (
-                          <Text style={styles.distanceBadge}>
-                             {formatDistanceKm(vendor.distanceKm)}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                    <Text style={styles.vendorPrice}>{formatPrice(vendor.minPrice, vendor.maxPrice)}</Text>
-                  </View>
-
-                  {vendor.intro ? (
-                    <Text style={styles.vendorIntro} numberOfLines={2}>{vendor.intro}</Text>
-                  ) : null}
-                  {vendor.addressLine ? (
-                    <Text style={styles.coverageText}>주소: {vendor.addressLine}</Text>
-                  ) : vendor.coverageAreas.length > 0 ? (
-                    <Text style={styles.coverageText}>활동 지역: {vendor.coverageAreas.join(", ")}</Text>
-                  ) : null}
-
-                  <Pressable
-                    onPress={() => router.push({ 
-                      pathname: "/expert-booking", 
-                      params: { 
-                        historyId: historyId ? String(historyId) : undefined, 
-                        vendorId: vendor.id,
-                        companyId: vendor.companyId,
-                        kakaoPlaceId: vendor.kakaoPlaceId,
-                        kakaoPlaceName: vendor.name,
-                        kakaoPlacePhone: vendor.phone,
-                        kakaoPlaceAddress: vendor.addressLine,
-                        kakaoPlaceLat: vendor.latitude != null ? String(vendor.latitude) : undefined,
-                        kakaoPlaceLng: vendor.longitude != null ? String(vendor.longitude) : undefined,
-                        vendorName: vendor.name, 
-                        vendorPhone: vendor.phone, 
-                        vendorIntro: vendor.intro, 
-                        vendorMinPrice: String(vendor.minPrice), 
-                        issueType: resolvedIssueType 
-                      } 
-                    })}
-                    style={styles.bookBtn}
-                  >
-                    <Text style={styles.bookBtnText}>예약 페이지로 이동</Text>
-                    <Feather name="chevron-right" size={16} color="#fff" />
-                  </Pressable>
-                </View>
-              ))
-            )}
-          </View>
-        ) : (
-          <View style={styles.guideBox}>
-            <MaterialCommunityIcons name="gesture-tap" size={32} color={MAIN_BLUE} />
-            <Text style={styles.guideText}>지역을 선택하시면{"\n"}가까운 전문 업체를 추천해 드립니다.</Text>
-          </View>
-        )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </View>
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </View>
   );
 }
 
@@ -490,26 +546,26 @@ const styles = StyleSheet.create({
   bulletText: { fontSize: 14, color: "#64748b", flex: 1 },
 
   // 위치 확인 섹션
-  locationBox: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    backgroundColor: "#fff", 
-    padding: 16, 
-    borderRadius: 20, 
+  locationBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 20,
     marginBottom: 24,
     borderWidth: 1,
     borderColor: "#e2e8f0"
   },
   locationTitle: { fontSize: 15, fontWeight: "800", color: "#1e293b" },
   locationDesc: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
-  locationBtn: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 4, 
-    backgroundColor: "#eff6ff", 
-    paddingHorizontal: 12, 
-    paddingVertical: 8, 
-    borderRadius: 12 
+  locationBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12
   },
   locationBtnActive: { backgroundColor: MAIN_BLUE },
   locationBtnText: { fontSize: 13, fontWeight: "700", color: MAIN_BLUE },
@@ -582,6 +638,30 @@ const styles = StyleSheet.create({
   coverageText: { fontSize: 12, color: "#94a3b8", marginBottom: 16 },
   bookBtn: { backgroundColor: "#1e293b", height: 48, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
   bookBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+
+  externalActions: { flexDirection: "row", gap: 8 },
+  callBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#10b981",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  callBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  kakaoBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#FEE500",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  kakaoBtnText: { color: "#1e293b", fontSize: 14, fontWeight: "800" },
 
   // 안내/비었을 때
   guideBox: { padding: 40, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#fff", borderRadius: 24, borderStyle: "dashed", borderWidth: 1, borderColor: "#cbd5e1" },

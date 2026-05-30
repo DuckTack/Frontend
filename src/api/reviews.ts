@@ -22,6 +22,7 @@ export type CreateReviewRequest = {
   kakaoPlaceAddress?: string;
   kakaoPlaceLat?: number;
   kakaoPlaceLng?: number;
+  historyId?: number;
   rating: number;
   content?: string;
 };
