@@ -100,9 +100,9 @@ export default function Upload() {
             <TypeItem emoji="🦠" text="곰팡이" />
           </View>
           <View style={[styles.typeGrid, { marginTop: 10 }]}>
-            <TypeItem emoji="🔧" text="파손" />
-            <TypeItem emoji="⚡" text="전기" />
-            <TypeItem emoji="🔥" text="가스" />
+            <TypeItem emoji="🔧" text="벗겨짐" />
+            <TypeItem emoji="⚡" text="부식" />
+            <TypeItem emoji="🔥" text="들뜸" />
           </View>
         </View>
 

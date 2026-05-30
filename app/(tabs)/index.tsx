@@ -418,7 +418,7 @@ export default function HomeTab() {
           <View style={styles.header}>
             <View>
               <Text style={styles.headerTitle}>DduckTack</Text>
-              <Text style={styles.headerSub}>AI 기반 스마트 주택 진단</Text>
+              <Text style={styles.headerSub}>AI 기반 주거 하자 진단</Text>
             </View>
 
             <Pressable
@@ -441,7 +441,7 @@ export default function HomeTab() {
           >
             <View style={styles.mainCardTextContent}>
               <Text style={styles.mainCardTitle}>사진 한 장으로{"\n"}문제 진단 시작하기</Text>
-              <Text style={styles.mainCardDesc}>곰팡이, 누수, 균열을 AI가 분석합니다.</Text>
+              <Text style={styles.mainCardDesc}>곰팡이, 누수, 균열 등{"\n"}주거 하자를AI가 분석합니다.</Text>
 
               <View style={styles.startButton}>
                 <Text style={styles.startButtonText}>지금 시작</Text>
@@ -457,7 +457,7 @@ export default function HomeTab() {
               <View>
                 <Text style={styles.reservationTitle}>내 예약 현황</Text>
                 <Text style={styles.reservationSub}>
-                  {reservationLoading ? "예약 상태를 확인하는 중입니다." : "실시간 예약 진행 상태"}
+                  {reservationLoading ? "예약 상태를 확인하는 중입니다." : ""}
                 </Text>
               </View>
 
@@ -465,7 +465,7 @@ export default function HomeTab() {
             </View>
 
             <View style={styles.progressRow}>
-              {["신청 완료", "수락 대기", "방문 대기", "해결 완료"].map((label, index) => {
+              {["신청 완료", "업체 확인 중", "방문 대기", "수리 완료"].map((label, index) => {
                 const active = latestReservation ? index <= reservationStep : false;
 
                 return (
@@ -507,7 +507,7 @@ export default function HomeTab() {
                     </View>
 
                     <View style={styles.reservationMetaRow}>
-                      <Text style={styles.reservationMetaLabel}>방문 예정</Text>
+                      <Text style={styles.reservationMetaLabel}>예약 날짜 및 시간</Text>
                       <Text style={styles.reservationMetaValue}>
                         {formatVisitDate(latestReservation.visitDate)}{" "}
                         {formatVisitTime(latestReservation.visitTime)}
@@ -528,14 +528,14 @@ export default function HomeTab() {
           <View style={styles.gridRow}>
             <View style={styles.infoBox}>
               <Text style={styles.infoEmoji}>🔍</Text>
-              <Text style={styles.infoTitle}>정밀 분석</Text>
-              <Text style={styles.infoDesc}>위험도와 원인을 상세히 파악합니다.</Text>
+              <Text style={styles.infoTitle}>AI 정밀 분석</Text>
+              <Text style={styles.infoDesc}>위험도와 원인을 파악합니다.</Text>
             </View>
 
             <View style={[styles.infoBox, { backgroundColor: "#eff6ff" }]}>
               <Text style={styles.infoEmoji}>🛠️</Text>
               <Text style={[styles.infoTitle, { color: "#3b82f6" }]}>DIY 가이드</Text>
-              <Text style={styles.infoDesc}>직접 해결 가능한 솔루션을 드립니다.</Text>
+              <Text style={styles.infoDesc}>직접 해결 가능한 대응 방법을 안내합니다.</Text>
             </View>
           </View>
 
@@ -543,7 +543,7 @@ export default function HomeTab() {
           <View style={styles.logoSection}>
             <Text style={styles.sectionTitle}>DduckTack 서비스</Text>
             <Text style={styles.sectionDesc}>
-              복잡한 수리 증빙부터 전문가 연결까지, 주거 문제를 가장 빠르게 해결하는 방법을 제시합니다.
+              진단 기록부터 리포트 생성, 전문가 예약까지 한 번에 관리합니다.
             </Text>
           </View>
         </ScrollView>

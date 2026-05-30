@@ -254,7 +254,7 @@ export default function Histories() {
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>진단 히스토리</Text>
-          <Text style={styles.headerSub}>우리 집 안전 기록을 한눈에 확인하세요</Text>
+          <Text style={styles.headerSub}>나의 진단결과를 한눈에 확인하세요</Text>
         </View>
 
         <View style={styles.filterWrapper}>
@@ -263,7 +263,7 @@ export default function Histories() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterScroll}
           >
-            {["전체", "균열", "누수", "곰팡이", "벗겨짐", "부식", "들뜸", "파손", "전기", "가스", "기타"].map(
+            {["전체", "균열", "누수", "곰팡이", "벗겨짐", "부식", "들뜸", "기타"].map(
                 (filter) => (
                     <Pressable
                         key={filter}
