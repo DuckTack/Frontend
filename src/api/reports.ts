@@ -200,6 +200,7 @@ export async function uploadReportImages(
         headers: {
             "Content-Type": "multipart/form-data",
         },
+        timeout: 60000, // 이미지 업로드는 최대 60초
     });
 
     const body = res.data?.data ?? res.data;

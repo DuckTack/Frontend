@@ -2,16 +2,50 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiClient } from "./apiClient";
 
 const PENDING_IMAGES_KEY = "pending_images_v1";
-const DIAGNOSIS_IMAGE_CACHE_KEY = "diagnosis_images_by_history_v1";
+const LAST_DIAGNOSIS_KEY = "last_diagnosis_result_v2";
 
-export type CachedDiagnosisImages = {
-  historyId: string;
-  diagnosisId?: string;
-  imageUris: string[];
-  imageKeys: string[];
-  updatedAt: string;
+// ─── 타입 정의 ────────────────────────────────────────────────
+export type DiagnosisStep = {
+  order: number;
+  title: string;
+  description: string;
+  warning?: string | null;
 };
 
+export type DiagnosisProduct = {
+  name: string;
+  category: string;
+  search_keyword: string;
+  reason: string;
+  quantity: number;
+  estimated_price: number;
+};
+
+export type DiagnosisApiResult = {
+  diagnosisId: number;
+  imageUrl: string;
+  issueType: string;
+  mainDefect: string;
+  riskScore: number;
+  riskScore100: number;
+  riskLevel: string;
+  detectionCount: number;
+  guide: {
+    guide: {
+      title: string;
+      summary: string;
+      difficulty: string;
+      steps: DiagnosisStep[];
+      warnings: string[];
+      estimated_time_min: number;
+      next_action: "DIY_OK" | "RECALL_IN_24H" | "CALL_PRO";
+    };
+    products: DiagnosisProduct[];
+  };
+  guideFallback: boolean;
+};
+
+// ─── 이미지 임시 저장 ─────────────────────────────────────────
 export async function setPendingImages(uris: string[]) {
   await AsyncStorage.setItem(PENDING_IMAGES_KEY, JSON.stringify(uris));
 }
@@ -22,8 +56,8 @@ export async function getPendingImages(): Promise<string[]> {
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
-        ? parsed.filter((x): x is string => typeof x === "string")
-        : [];
+      ? parsed.filter((x): x is string => typeof x === "string")
+      : [];
   } catch {
     return [];
   }
@@ -33,96 +67,45 @@ export async function clearPendingImages() {
   await AsyncStorage.removeItem(PENDING_IMAGES_KEY);
 }
 
-async function loadDiagnosisImageCache(): Promise<Record<string, CachedDiagnosisImages>> {
-  const raw = await AsyncStorage.getItem(DIAGNOSIS_IMAGE_CACHE_KEY);
-  if (!raw) return {};
+// ─── 진단 결과 캐시 ───────────────────────────────────────────
+export async function getLastDiagnosisResult(): Promise<DiagnosisApiResult | null> {
+  const raw = await AsyncStorage.getItem(LAST_DIAGNOSIS_KEY);
+  if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return JSON.parse(raw);
   } catch {
-    return {};
+    return null;
   }
 }
 
-async function saveDiagnosisImagesForHistory(input: CachedDiagnosisImages) {
-  const cache = await loadDiagnosisImageCache();
-  cache[input.historyId] = input;
-  await AsyncStorage.setItem(DIAGNOSIS_IMAGE_CACHE_KEY, JSON.stringify(cache));
-}
-
-export async function getCachedDiagnosisImages(historyId: string): Promise<CachedDiagnosisImages | null> {
-  const cache = await loadDiagnosisImageCache();
-  return cache[String(historyId)] ?? null;
-}
-
-export async function startDiagnosis(): Promise<{
-  historyId: string;
+// ─── 메인: 진단 시작 (/api/diagnosis 호출) ────────────────────
+export async function startDiagnosis(preferDiy = false): Promise<{
   diagnosisId: string;
-  status: string;
 }> {
-  // 1. 저장된 이미지 가져오기
   const images = await getPendingImages();
-  if (images.length === 0) {
-    throw new Error("NO_PENDING_IMAGES");
-  }
+  if (images.length === 0) throw new Error("NO_PENDING_IMAGES");
 
-  // 2. FormData 생성
+  // 첫 번째 이미지 사용 (새 엔드포인트는 이미지 1장)
+  const uri = images[0];
+  const filename = uri.split("/").pop() || "image.jpg";
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const type = ext === "png" ? "image/png" : "image/jpeg";
+
   const formData = new FormData();
-  images.forEach((uri, index) => {
-    const filename = uri.split("/").pop() || `image-${index + 1}.jpg`;
-    const ext = filename.split(".").pop()?.toLowerCase();
-    const type = ext === "png" ? "image/png" : "image/jpeg";
+  formData.append("image", { uri, name: filename, type } as any);
 
-    formData.append("files", {
-      uri,
-      name: filename,
-      type,
-    } as any);
-  });
+  const url = preferDiy ? "/api/diagnosis?preferDiy=true" : "/api/diagnosis";
 
-  // 3. 파일 업로드
-  const uploadRes = await apiClient.post("/api/files/upload", formData, {
+  const res = await apiClient.post(url, formData, {
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 30000,
+    timeout: 90000, // YOLO + LLM 합산 최대 90초
   });
 
-  const uploaded = uploadRes.data?.data ?? uploadRes.data;
+  const data: DiagnosisApiResult = res.data?.data ?? res.data;
 
-  // ⭐ 여기 key 사용해야 함
-  const fileKeys = Array.isArray(uploaded)
-      ? uploaded.map((item: any) => item?.key).filter(Boolean)
-      : [];
-
-  if (fileKeys.length === 0) {
-    throw new Error("UPLOAD_KEY_MISSING");
-  }
-
-  // 4. 분석 시작
-  const analysisRes = await apiClient.post("/api/analysis", {
-    imageKeys: fileKeys,
-  });
-
-  const result = analysisRes.data?.data ?? analysisRes.data;
-
-  const historyId = String(result?.historyId);
-  const diagnosisId = result?.diagnosisId == null ? undefined : String(result.diagnosisId);
-
-  if (historyId && historyId !== "undefined") {
-    await saveDiagnosisImagesForHistory({
-      historyId,
-      diagnosisId,
-      imageUris: images,
-      imageKeys: fileKeys,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  // 5. 이미지 목록 삭제
+  // 결과를 AsyncStorage에 캐싱
+  await AsyncStorage.setItem(LAST_DIAGNOSIS_KEY, JSON.stringify(data));
   await clearPendingImages();
 
-  return {
-    historyId,
-    diagnosisId: diagnosisId ?? "",
-    status: String(result?.status ?? "ANALYZING"),
-  };
+  return { diagnosisId: String(data.diagnosisId) };
 }
