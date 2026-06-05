@@ -12,6 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { router, Stack } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 // [원본 API 유지]
@@ -39,7 +40,7 @@ export default function ForgotPasswordPage() {
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const canVerifyCode = codeSent && verificationCode.trim().length > 0 && !verifyingCode;
   const canResetPassword =
-    codeVerified && newPassword.length > 0 && newPasswordConfirm.length > 0 && !resetting;
+      codeVerified && newPassword.length > 0 && newPasswordConfirm.length > 0 && !resetting;
 
   // --- [로직: 원본 유지] ---
   async function handleSendCode() {
@@ -124,148 +125,149 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+        <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
+          <Stack.Screen options={{ headerShown: false }} />
 
-        {/* 헤더 디자인 통일 */}
-        <View style={styles.header}>
-          <View style={styles.headerTopRow}>
-            <View>
-              <Text style={styles.headerTitle}>비밀번호 재설정</Text>
-              <Text style={styles.headerSub}>인증 후 새 비밀번호를 설정해주세요</Text>
+          {/* 헤더 디자인 통일 */}
+          <View style={styles.header}>
+            <View style={styles.headerTopRow}>
+              <View>
+                <Text style={styles.headerTitle}>비밀번호 재설정</Text>
+                <Text style={styles.headerSub}>인증 후 새 비밀번호를 설정해주세요</Text>
+              </View>
+              <Pressable onPress={() => router.replace("/login")} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#334155" />
+              </Pressable>
             </View>
-            <Pressable onPress={() => router.replace("/login")} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#334155" />
+          </View>
+
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+            {/* 아이디 섹션 */}
+            <View style={styles.section}>
+              <Text style={styles.label}>아이디 <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                  style={styles.fullInput}
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="아이디를 입력해주세요"
+                  autoCapitalize="none"
+              />
+            </View>
+
+            {/* 이메일 및 인증번호 발송 */}
+            <View style={styles.section}>
+              <Text style={styles.label}>이메일 <Text style={styles.required}>*</Text></Text>
+              <View style={styles.row}>
+                <TextInput
+                    style={styles.flexInput}
+                    value={email}
+                    onChangeText={(value) => {
+                      setEmail(value);
+                      setCodeSent(false);
+                      setCodeVerified(false);
+                    }}
+                    placeholder="가입한 이메일 입력"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                />
+                <Pressable
+                    style={[styles.inlineButton, (sendingCode || !normalizedEmail) && { opacity: 0.6 }]}
+                    onPress={handleSendCode}
+                    disabled={sendingCode || !normalizedEmail}
+                >
+                  {sendingCode ? <ActivityIndicator size="small" color={MAIN_BLUE} /> : <Text style={styles.inlineButtonText}>코드발송</Text>}
+                </Pressable>
+              </View>
+            </View>
+
+            {/* 인증번호 입력 및 확인 */}
+            <View style={styles.section}>
+              <Text style={styles.label}>인증코드 <Text style={styles.required}>*</Text></Text>
+              <View style={styles.row}>
+                <TextInput
+                    style={styles.flexInput}
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    placeholder="코드 6자리 입력"
+                    keyboardType="number-pad"
+                />
+                <Pressable
+                    style={[styles.inlineButton, !canVerifyCode && { backgroundColor: "#f1f5f9" }]}
+                    onPress={handleVerifyCode}
+                    disabled={!canVerifyCode}
+                >
+                  {verifyingCode ? <ActivityIndicator size="small" color={MAIN_BLUE} /> :
+                      <Text style={[styles.inlineButtonText, !canVerifyCode && { color: "#cbd5e1" }]}>인증확인</Text>
+                  }
+                </Pressable>
+              </View>
+              {codeVerified && <Text style={styles.statusTextSuccess}>✓ 인증이 완료되었습니다.</Text>}
+            </View>
+
+            {/* 새 비밀번호 입력 (인증 완료 시 강조) */}
+            <View style={[styles.section, !codeVerified && { opacity: 0.5 }]}>
+              <Text style={styles.label}>새 비밀번호 <Text style={styles.required}>*</Text></Text>
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                    style={styles.passwordInput}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    placeholder="새 비밀번호 입력"
+                    secureTextEntry={!showPassword}
+                    editable={codeVerified}
+                />
+                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                  <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#94a3b8" />
+                </Pressable>
+              </View>
+
+              <View style={[styles.passwordWrapper, { marginTop: 10 }]}>
+                <TextInput
+                    style={styles.passwordInput}
+                    value={newPasswordConfirm}
+                    onChangeText={setNewPasswordConfirm}
+                    placeholder="새 비밀번호 확인"
+                    secureTextEntry={!showConfirm}
+                    editable={codeVerified}
+                />
+                <Pressable onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeIcon}>
+                  <Ionicons name={showConfirm ? "eye-off" : "eye"} size={20} color="#94a3b8" />
+                </Pressable>
+              </View>
+              {newPasswordConfirm.length > 0 && (
+                  <Text style={[styles.statusText, { color: newPassword === newPasswordConfirm ? "#10b981" : "#ef4444" }]}>
+                    {newPassword === newPasswordConfirm ? "✓ 비밀번호가 일치합니다." : "✕ 비밀번호가 일치하지 않습니다."}
+                  </Text>
+              )}
+            </View>
+
+            {/* 재설정 완료 버튼 */}
+            <Pressable
+                style={[styles.submitButton, (!canResetPassword || resetting) && { opacity: 0.7 }]}
+                onPress={handleResetPassword}
+                disabled={!canResetPassword || resetting}
+            >
+              {resetting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>비밀번호 재설정 완료</Text>}
             </Pressable>
-          </View>
-        </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          
-          {/* 아이디 섹션 */}
-          <View style={styles.section}>
-            <Text style={styles.label}>아이디 <Text style={styles.required}>*</Text></Text>
-            <TextInput
-              style={styles.fullInput}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="아이디를 입력해주세요"
-              autoCapitalize="none"
-            />
-          </View>
-
-          {/* 이메일 및 인증번호 발송 */}
-          <View style={styles.section}>
-            <Text style={styles.label}>이메일 <Text style={styles.required}>*</Text></Text>
-            <View style={styles.row}>
-              <TextInput
-                style={styles.flexInput}
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value);
-                  setCodeSent(false);
-                  setCodeVerified(false);
-                }}
-                placeholder="가입한 이메일 입력"
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              <Pressable 
-                style={[styles.inlineButton, (sendingCode || !normalizedEmail) && { opacity: 0.6 }]} 
-                onPress={handleSendCode}
-                disabled={sendingCode || !normalizedEmail}
-              >
-                {sendingCode ? <ActivityIndicator size="small" color={MAIN_BLUE} /> : <Text style={styles.inlineButtonText}>코드발송</Text>}
+            <View style={styles.footer}>
+              <Pressable onPress={() => router.replace("/login")}>
+                <Text style={styles.footerLink}>로그인으로 돌아가기</Text>
               </Pressable>
             </View>
-          </View>
 
-          {/* 인증번호 입력 및 확인 */}
-          <View style={styles.section}>
-            <Text style={styles.label}>인증코드 <Text style={styles.required}>*</Text></Text>
-            <View style={styles.row}>
-              <TextInput
-                style={styles.flexInput}
-                value={verificationCode}
-                onChangeText={setVerificationCode}
-                placeholder="코드 6자리 입력"
-                keyboardType="number-pad"
-              />
-              <Pressable 
-                style={[styles.inlineButton, !canVerifyCode && { backgroundColor: "#f1f5f9" }]} 
-                onPress={handleVerifyCode}
-                disabled={!canVerifyCode}
-              >
-                {verifyingCode ? <ActivityIndicator size="small" color={MAIN_BLUE} /> : 
-                  <Text style={[styles.inlineButtonText, !canVerifyCode && { color: "#cbd5e1" }]}>인증확인</Text>
-                }
-              </Pressable>
-            </View>
-            {codeVerified && <Text style={styles.statusTextSuccess}>✓ 인증이 완료되었습니다.</Text>}
-          </View>
-
-          {/* 새 비밀번호 입력 (인증 완료 시 강조) */}
-          <View style={[styles.section, !codeVerified && { opacity: 0.5 }]}>
-            <Text style={styles.label}>새 비밀번호 <Text style={styles.required}>*</Text></Text>
-            <View style={styles.passwordWrapper}>
-              <TextInput
-                style={styles.passwordInput}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                placeholder="새 비밀번호 입력"
-                secureTextEntry={!showPassword}
-                editable={codeVerified}
-              />
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#94a3b8" />
-              </Pressable>
-            </View>
-            
-            <View style={[styles.passwordWrapper, { marginTop: 10 }]}>
-              <TextInput
-                style={styles.passwordInput}
-                value={newPasswordConfirm}
-                onChangeText={setNewPasswordConfirm}
-                placeholder="새 비밀번호 확인"
-                secureTextEntry={!showConfirm}
-                editable={codeVerified}
-              />
-              <Pressable onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeIcon}>
-                <Ionicons name={showConfirm ? "eye-off" : "eye"} size={20} color="#94a3b8" />
-              </Pressable>
-            </View>
-            {newPasswordConfirm.length > 0 && (
-              <Text style={[styles.statusText, { color: newPassword === newPasswordConfirm ? "#10b981" : "#ef4444" }]}>
-                {newPassword === newPasswordConfirm ? "✓ 비밀번호가 일치합니다." : "✕ 비밀번호가 일치하지 않습니다."}
-              </Text>
-            )}
-          </View>
-
-          {/* 재설정 완료 버튼 */}
-          <Pressable
-            style={[styles.submitButton, (!canResetPassword || resetting) && { opacity: 0.7 }]}
-            onPress={handleResetPassword}
-            disabled={!canResetPassword || resetting}
-          >
-            {resetting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>비밀번호 재설정 완료</Text>}
-          </Pressable>
-
-          <View style={styles.footer}>
-            <Pressable onPress={() => router.replace("/login")}>
-              <Text style={styles.footerLink}>로그인으로 돌아가기</Text>
-            </Pressable>
-          </View>
-
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { paddingHorizontal: 24, paddingTop: Platform.OS === "ios" ? 60 : 40, paddingBottom: 24, backgroundColor: "#f8faff" },
+  header: { paddingHorizontal: 24, paddingTop: 0,
+    paddingBottom: 24, backgroundColor: "#f8faff" },
   headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   headerTitle: { fontSize: 28, fontWeight: "900", color: "#1e293b" },
   headerSub: { fontSize: 14, color: "#64748b", marginTop: 4 },

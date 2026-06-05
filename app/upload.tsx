@@ -215,8 +215,8 @@ function TypeItem({ emoji, text }: { emoji: string; text: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  scrollContent: { paddingHorizontal: 24, paddingTop: Platform.OS === 'android' ? 40 : 20, paddingBottom: 20 },
-  header: { marginBottom: 32 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 20 },
+  header: { marginBottom: 24 },
   headerTitle: { fontSize: 28, fontWeight: "900", color: "#111827" },
   headerSub: { fontSize: 14, color: "#6b7280", marginTop: 4 },
   section: { marginBottom: 32 },

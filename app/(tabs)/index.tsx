@@ -522,7 +522,22 @@ export default function HomeTab() {
                 </Text>
               </View>
 
-              <Text style={styles.reservationIcon}>🕒</Text>
+              <View style={styles.reservationIconRow}>
+                <Pressable
+                    onPress={fetchLatestReservation}
+                    disabled={reservationLoading}
+                    hitSlop={10}
+                    style={({ pressed }) => [
+                      styles.reservationRefreshBtn,
+                      pressed && !reservationLoading && styles.reservationRefreshBtnPressed,
+                      reservationLoading && styles.reservationRefreshBtnDisabled,
+                    ]}
+                >
+                  <Text style={styles.reservationRefreshText}>
+                    {reservationLoading ? "…" : "↻"}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
             {hasReservation ? (
@@ -869,8 +884,41 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  reservationIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
   reservationIcon: {
     fontSize: 22,
+  },
+
+  reservationRefreshBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  reservationRefreshBtnPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
+  },
+
+  reservationRefreshBtnDisabled: {
+    opacity: 0.55,
+  },
+
+  reservationRefreshText: {
+    fontSize: 19,
+    lineHeight: 22,
+    fontWeight: "900",
+    color: "#3b82f6",
   },
 
   progressRow: {

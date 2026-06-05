@@ -3,7 +3,7 @@ import type { IssueType } from "./histories";
 
 export const VENDOR_REGIONS = ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산"] as const;
 export type VendorRegion = (typeof VENDOR_REGIONS)[number];
-export type ExpertVendorSort = "price" | "rating" | "name";
+export type ExpertVendorSort = "rating" | "distance" | "name";
 
 export type ExpertVendor = {
   /** 화면 렌더링/라우팅용 안정 key. 제휴 업체는 companyId, 카카오 업체는 kakaoPlaceId 기반으로 만든다. */
@@ -74,6 +74,14 @@ function toNumberOrUndefined(value: unknown) {
   if (value === null || value === undefined || value === "") return undefined;
   const parsed = Number(value);
   return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function pickFirstNumber(...values: unknown[]) {
+  for (const value of values) {
+    const parsed = toNumberOrUndefined(value);
+    if (parsed !== undefined) return parsed;
+  }
+  return undefined;
 }
 
 function extractListFromResponse(data: any): any[] {
@@ -179,8 +187,9 @@ function normalizeVendor(raw: any): ExpertVendor {
             : [],
 
     phone: raw?.phone ? String(raw.phone) : undefined,
-    latitude: toNumberOrUndefined(raw?.latitude ?? raw?.lat),
-    longitude: toNumberOrUndefined(raw?.longitude ?? raw?.lng),
+    // 백엔드/카카오 응답 필드명이 섞여도 제휴업체 거리 계산이 되도록 가능한 좌표 필드를 모두 받는다.
+    latitude: pickFirstNumber(raw?.latitude, raw?.lat, raw?.y, raw?.companyLatitude, raw?.companyLat),
+    longitude: pickFirstNumber(raw?.longitude, raw?.lng, raw?.lon, raw?.x, raw?.companyLongitude, raw?.companyLng, raw?.companyLon),
 
     addressLine:
         raw?.addressLine
@@ -224,11 +233,13 @@ export async function listExpertVendors(params: {
     }
   }
 
+  const backendSortKey = params.sortKey === "distance" ? "name" : params.sortKey;
+
   const res = await apiClient.get("/api/experts/vendors", {
     params: {
       region: params.region,
       issueType: params.issueType,
-      sortKey: params.sortKey,
+      sortKey: backendSortKey,
       direction: params.direction,
     },
   });
@@ -267,8 +278,10 @@ export async function listNearbyCompanies(
   return list.map((item: any, index: number) => {
     const rawId = item?.id;
     const name = String(item?.name ?? "");
-    const lat = toNumberOrUndefined(item?.latitude);
-    const lng = toNumberOrUndefined(item?.longitude);
+    // 카카오는 x=경도, y=위도 형태로 오는 경우가 있고,
+    // 제휴업체는 백엔드 DTO에 따라 latitude/longitude 또는 companyLat/companyLng가 올 수 있다.
+    const lat = pickFirstNumber(item?.latitude, item?.lat, item?.y, item?.companyLatitude, item?.companyLat);
+    const lng = pickFirstNumber(item?.longitude, item?.lng, item?.lon, item?.x, item?.companyLongitude, item?.companyLng, item?.companyLon);
     const kakaoPlaceId = item?.kakaoPlaceId ? String(item.kakaoPlaceId) : undefined;
     const placeUrl = item?.placeUrl ? String(item.placeUrl) : kakaoPlaceUrlFromId(kakaoPlaceId);
 

@@ -12,6 +12,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useRouter, Stack } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // [원본 API 및 스토리지 로직 유지]
 import { login } from "../src/api/auth";
@@ -35,13 +36,13 @@ export default function Login() {
 
     try {
       setIsSubmitting(true);
-      
+
       // 원본의 trim 처리 유지
-      const data = await login({ 
-        username: username.trim(), 
-        password: password.trim() 
+      const data = await login({
+        username: username.trim(),
+        password: password.trim()
       });
-      
+
       await saveAccessToken(data.accessToken);
 
       const trimmedUsername = username.trim();
@@ -59,98 +60,100 @@ export default function Login() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Stack.Screen options={{ headerShown: false }} />
-
-        {/* 로고 영역 */}
-        <View style={styles.logoSection}>
-          <View style={styles.logoIconBox}>
-            <Text style={{ fontSize: 30 }}>🏠</Text>
-          </View>
-          <Text style={styles.logoTitle}>DduckTack</Text>
-          <Text style={styles.logoSubTitle}>AI 기반 주거 하자 진단 서비스</Text>
-        </View>
-
-        {/* 입력 폼 */}
-        <View style={styles.formSection}>
-          <Text style={styles.inputLabel}>아이디</Text>
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            placeholder="아이디를 입력하세요"
-            autoCapitalize="none"
-            style={styles.input}
-            placeholderTextColor="#9ca3af"
-          />
-
-          <Text style={styles.inputLabel}>비밀번호</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="비밀번호를 입력하세요"
-              secureTextEntry={!showPassword}
-              style={styles.input}
-              placeholderTextColor="#9ca3af"
-            />
-            <TouchableOpacity 
-              onPress={() => setShowPassword(!showPassword)} 
-              style={styles.showPasswordBtn}
-            >
-              <Text style={styles.showPasswordText}>
-                {showPassword ? "숨기기" : "보기"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 버튼 영역 */}
-        <View style={styles.buttonSection}>
-          <TouchableOpacity
-            onPress={handleLogin}
-            disabled={isSubmitting}
-            style={[
-              styles.loginBtn,
-              { backgroundColor: isSubmitting ? "#93c5fd" : MAIN_BLUE }
-            ]}
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
+        <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+        >
+          <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
           >
-            {isSubmitting ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.loginBtnText}>로그인</Text>
-            )}
-          </TouchableOpacity>
+            <Stack.Screen options={{ headerShown: false }} />
 
-          <TouchableOpacity
-            onPress={() => router.push("/signup-consent")} // 원본 signup-consent 경로 유지
-            style={styles.signupBtn}
-          >
-            <Text style={styles.signupBtnText}>회원가입</Text>
-          </TouchableOpacity>
-        </View>
+            {/* 로고 영역 */}
+            <View style={styles.logoSection}>
+              <View style={styles.logoIconBox}>
+                <Text style={{ fontSize: 30 }}>🏠</Text>
+              </View>
+              <Text style={styles.logoTitle}>DduckTack</Text>
+              <Text style={styles.logoSubTitle}>AI 기반 주거 하자 진단 서비스</Text>
+            </View>
 
-        {/* 하단 보조 링크 */}
-        <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={() => router.push("/forgot-password")}>
-            <Text style={styles.footerLinkText}>아이디 찾기   |   비밀번호 찾기</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* 입력 폼 */}
+            <View style={styles.formSection}>
+              <Text style={styles.inputLabel}>아이디</Text>
+              <TextInput
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="아이디를 입력하세요"
+                  autoCapitalize="none"
+                  style={styles.input}
+                  placeholderTextColor="#9ca3af"
+              />
+
+              <Text style={styles.inputLabel}>비밀번호</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="비밀번호를 입력하세요"
+                    secureTextEntry={!showPassword}
+                    style={styles.input}
+                    placeholderTextColor="#9ca3af"
+                />
+                <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.showPasswordBtn}
+                >
+                  <Text style={styles.showPasswordText}>
+                    {showPassword ? "숨기기" : "보기"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 버튼 영역 */}
+            <View style={styles.buttonSection}>
+              <TouchableOpacity
+                  onPress={handleLogin}
+                  disabled={isSubmitting}
+                  style={[
+                    styles.loginBtn,
+                    { backgroundColor: isSubmitting ? "#93c5fd" : MAIN_BLUE }
+                  ]}
+              >
+                {isSubmitting ? (
+                    <ActivityIndicator color="#ffffff" />
+                ) : (
+                    <Text style={styles.loginBtnText}>로그인</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                  onPress={() => router.push("/signup-consent")} // 원본 signup-consent 경로 유지
+                  style={styles.signupBtn}
+              >
+                <Text style={styles.signupBtnText}>회원가입</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 하단 보조 링크 */}
+            <View style={styles.footerLinks}>
+              <TouchableOpacity onPress={() => router.push("/forgot-password")}>
+                <Text style={styles.footerLinkText}>아이디 찾기   |   비밀번호 찾기</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff" },
-  scrollContent: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 30, paddingVertical: 40 },
-  
+  scrollContent: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 30, paddingVertical: 24, paddingBottom: 40 },
+
   logoSection: { alignItems: "center", marginBottom: 40 },
   logoIconBox: {
     width: 80,

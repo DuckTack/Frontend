@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Platform, Linking } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather, MaterialCommunityIcons, FontAwesome } from "@expo/vector-icons";
 
@@ -143,6 +144,24 @@ function sortPartnerFirstByDistance(vendors: ExpertVendor[]) {
   });
 }
 
+
+function sortPartnerFirstByRating(vendors: ExpertVendor[]) {
+  return [...vendors].sort((a, b) => {
+    const partnerDiff = Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
+    if (partnerDiff !== 0) return partnerDiff;
+
+    const ra = a.avgRating ?? 0;
+    const rb = b.avgRating ?? 0;
+    if (rb !== ra) return rb - ra;
+
+    const ca = a.reviewCount ?? 0;
+    const cb = b.reviewCount ?? 0;
+    if (cb !== ca) return cb - ca;
+
+    return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+  });
+}
+
 function sortPartnerFirstByName(vendors: ExpertVendor[]) {
   return [...vendors].sort((a, b) => {
     const partnerDiff = Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
@@ -162,7 +181,7 @@ export default function Expert() {
   const [vendors, setVendors] = useState<ExpertVendor[]>([]);
   const [resolvedIssueType, setResolvedIssueType] = useState<IssueType>("MOLD");
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<ExpertVendorSort>("price");
+  const [sortKey, setSortKey] = useState<ExpertVendorSort>("distance");
   const [sortAscending, setSortAscending] = useState(true);
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const [requestingLocation, setRequestingLocation] = useState(false);
@@ -264,10 +283,10 @@ export default function Expert() {
 
       const nextRegion = selectedRegion ?? await findNearestRegionFromVendors(coords);
       setSelectedRegion(nextRegion);
-      setSortKey("name");
+      setSortKey("distance");
       setSortAscending(true);
 
-      await loadVendors(nextRegion, "name", true, coords, true);
+      await loadVendors(nextRegion, "distance", true, coords, true);
       Alert.alert("위치 확인 완료", "현재 위치 기준으로 가까운 업체를 정렬했습니다.");
     } catch (error: any) {
       const message = String(error?.message ?? "");
@@ -309,10 +328,14 @@ export default function Expert() {
           });
 
           if (regionVendors.length > 0) {
-            if (useDistanceSort && coords) {
-              setVendors(sortPartnerFirstByDistance(withDistanceFromUser(regionVendors, coords)));
+            const enrichedVendors = coords ? withDistanceFromUser(regionVendors, coords) : regionVendors;
+
+            if (nextSortKey === "rating") {
+              setVendors(sortPartnerFirstByRating(enrichedVendors));
+            } else if (nextSortKey === "distance" && useDistanceSort && coords) {
+              setVendors(sortPartnerFirstByDistance(enrichedVendors));
             } else {
-              setVendors(sortPartnerFirstByName(regionVendors));
+              setVendors(sortPartnerFirstByName(enrichedVendors));
             }
             return;
           }
@@ -328,10 +351,14 @@ export default function Expert() {
         direction: nextAscending ? "asc" : "desc",
       });
 
-      if (useDistanceSort && coords) {
-        setVendors(sortPartnerFirstByDistance(withDistanceFromUser(baseVendors, coords)));
+      const enrichedBaseVendors = coords ? withDistanceFromUser(baseVendors, coords) : baseVendors;
+
+      if (nextSortKey === "rating") {
+        setVendors(sortPartnerFirstByRating(enrichedBaseVendors));
+      } else if (nextSortKey === "distance" && useDistanceSort && coords) {
+        setVendors(sortPartnerFirstByDistance(enrichedBaseVendors));
       } else {
-        setVendors(sortPartnerFirstByName(baseVendors));
+        setVendors(sortPartnerFirstByName(enrichedBaseVendors));
       }
     } catch {
       setVendors([]);
@@ -357,16 +384,16 @@ export default function Expert() {
 
         const nearestRegion = await findNearestRegionFromVendors(coords);
         setSelectedRegion(nearestRegion);
-        setSortKey("name");
+        setSortKey("distance");
         setSortAscending(true);
 
-        await loadVendors(nearestRegion, "name", true, coords, true);
+        await loadVendors(nearestRegion, "distance", true, coords, true);
       } catch {
         // 위치 권한이 없으면 기본 지역을 보여주되, 거리순이 아니라 가나다순으로 보여준다.
         const fallbackRegion = "서울";
         setSelectedRegion(fallbackRegion);
         setLocationSortEnabled(false);
-        await loadVendors(fallbackRegion, "name", true, null, false);
+        await loadVendors(fallbackRegion, "distance", true, null, false);
       } finally {
         setRequestingLocation(false);
       }
@@ -388,17 +415,21 @@ export default function Expert() {
   );
 
   const handleSortPress = (nextKey: ExpertVendorSort) => {
-    const nextAscending = sortKey === nextKey ? !sortAscending : true;
+    const nextAscending = sortKey === nextKey ? !sortAscending : nextKey === "distance";
+    const coords = userCoordinatesRef.current;
+    const useDistance = nextKey === "distance" && !!coords;
+
     setSortKey(nextKey);
     setSortAscending(nextAscending);
+    setLocationSortEnabled(useDistance);
 
     if (selectedRegion) {
       loadVendors(
           selectedRegion,
           nextKey,
           nextAscending,
-          userCoordinatesRef.current,
-          locationSortEnabled,
+          coords,
+          useDistance,
       );
     }
   };
@@ -413,7 +444,7 @@ export default function Expert() {
   if (loading || !info) return <ScreenState loading />;
 
   return (
-      <View style={styles.container}>
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
 
         {/* 헤더 */}
@@ -490,10 +521,10 @@ export default function Expert() {
                         const coords = userCoordinatesRef.current;
                         const useDistance = !!coords;
                         setSelectedRegion(region);
-                        setSortKey("name");
+                        setSortKey("distance");
                         setSortAscending(true);
                         setLocationSortEnabled(useDistance);
-                        loadVendors(region, "name", true, coords, useDistance);
+                        loadVendors(region, "distance", true, coords, useDistance);
                       }}
                       style={[styles.regionChip, selectedRegion === region && styles.regionChipActive]}
                   >
@@ -511,19 +542,19 @@ export default function Expert() {
                     <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
                     {vendorsWithDistance.length > 0 && (
                         <Text style={styles.listSubCount}>
-                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳{locationSortEnabled ? " · 거리순" : " · 가나다순"}
+                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳{sortKey === "rating" ? " · 별점순" : " · 거리순"}
                         </Text>
                     )}
                   </View>
                   <View style={styles.filterRow}>
-                    <Pressable onPress={() => handleSortPress("price")}>
-                      <Text style={[styles.filterText, sortKey === "price" && styles.filterActive]}>
-                        가격순{sortKey === "price" && (sortAscending ? "↑" : "↓")}
-                      </Text>
-                    </Pressable>
                     <Pressable onPress={() => handleSortPress("rating")}>
                       <Text style={[styles.filterText, sortKey === "rating" && styles.filterActive]}>
-                        별점순{sortKey === "rating" && (sortAscending ? "↑" : "↓")}
+                        별점순{sortKey === "rating" && "↓"}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleSortPress("distance")}>
+                      <Text style={[styles.filterText, sortKey === "distance" && styles.filterActive]}>
+                        거리순{sortKey === "distance" && (sortAscending ? "↑" : "↓")}
                       </Text>
                     </Pressable>
                   </View>
@@ -562,34 +593,35 @@ export default function Expert() {
                                       <Text style={styles.externalBadgeText}>외부</Text>
                                     </View>
                                 )}
-                                <Pressable
-                                    onPress={() => router.push({
-                                      pathname: "/expert-reviews/[vendorId]",
-                                      params: {
-                                        vendorId: vendor.companyId ?? vendor.kakaoPlaceId ?? vendor.id,
-                                        vendorName: vendor.name,
-                                        companyId: vendor.companyId,
-                                        kakaoPlaceId: vendor.kakaoPlaceId,
-                                        kakaoPlacePhone: vendor.phone,
-                                        kakaoPlaceAddress: vendor.addressLine,
-                                        kakaoPlaceLat: vendor.latitude != null ? String(vendor.latitude) : undefined,
-                                        kakaoPlaceLng: vendor.longitude != null ? String(vendor.longitude) : undefined,
-                                        readOnly: "true",
-                                        from: "expert",
-                                      },
-                                    } as any)}
-                                    style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
-                                    hitSlop={8}
-                                >
-                                  <FontAwesome name="star" size={12} color="#fff" />
-                                  <Text style={styles.reviewButtonText}>리뷰 보기</Text>
-                                  <Feather name="chevron-right" size={13} color="#fff" />
-                                </Pressable>
+                                {isPartnerVendor(vendor) && (
+                                    <Pressable
+                                        onPress={() => router.push({
+                                          pathname: "/expert-reviews/[vendorId]",
+                                          params: {
+                                            vendorId: vendor.companyId ?? vendor.id,
+                                            vendorName: vendor.name,
+                                            companyId: vendor.companyId,
+                                            readOnly: "true",
+                                            from: "expert",
+                                          },
+                                        } as any)}
+                                        style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
+                                        hitSlop={8}
+                                    >
+                                      <FontAwesome name="star" size={12} color="#fff" />
+                                      <Text style={styles.reviewButtonText}>리뷰 보기</Text>
+                                      <Feather name="chevron-right" size={13} color="#fff" />
+                                    </Pressable>
+                                )}
                               </View>
                               <View style={styles.ratingRow}>
-                                <FontAwesome name="star" size={14} color="#f59e0b" />
-                                <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
-                                <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
+                                {isPartnerVendor(vendor) && (
+                                    <>
+                                      <FontAwesome name="star" size={14} color="#f59e0b" />
+                                      <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
+                                      <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
+                                    </>
+                                )}
                                 {vendor.distanceKm != null && (
                                     <Text style={styles.distanceBadge}>
                                       {formatDistanceKm(vendor.distanceKm)}
@@ -660,7 +692,7 @@ export default function Expert() {
           )}
           <View style={{ height: 40 }} />
         </ScrollView>
-      </View>
+      </SafeAreaView>
   );
 }
 
@@ -671,7 +703,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 0,
     paddingBottom: 16,
     backgroundColor: "#fff",
   },

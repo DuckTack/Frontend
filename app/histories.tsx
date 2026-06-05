@@ -7,10 +7,10 @@ import {
   Alert,
   StyleSheet,
   Platform,
-  SafeAreaView,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons, Feather } from "@expo/vector-icons";
@@ -292,7 +292,7 @@ export default function Histories() {
   }, [items, selectedFilter]);
 
   return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
 
         <View style={styles.header}>
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === "ios" ? 10 : 20,
+    paddingTop: 0,
     paddingBottom: 16,
     backgroundColor: HEADER_BG,
   },

@@ -257,6 +257,13 @@ export async function saveReportDraft(
         data
     );
 }
+export async function deleteReport(
+    diagnosisId: number | string
+): Promise<void> {
+    await apiClient.delete(
+        `/api/reports/diagnosis/${diagnosisId}`
+    );
+}
 
 export async function uploadFrontendGeneratedPdf(
     diagnosisId: string | number,
