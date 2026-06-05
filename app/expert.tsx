@@ -8,7 +8,7 @@ import { Feather, MaterialCommunityIcons, FontAwesome } from "@expo/vector-icons
 import ScreenState from "../src/components/ScreenState";
 import { getHistoryDetail, IssueType } from "../src/api/histories";
 import { getExpertInfo, ExpertInfo } from "../src/api/guides";
-import { listExpertVendors, listNearbyCompanies, type ExpertVendor, type ExpertVendorSort, VENDOR_REGIONS } from "../src/api/experts";
+import { listExpertVendors, listNearbyCompanies, REGION_COORDS, type ExpertVendor, type ExpertVendorSort, type VendorRegion, VENDOR_REGIONS } from "../src/api/experts";
 import { requestCurrentCoordinates, type Coordinates } from "../src/utils/location";
 
 const MAIN_BLUE = "#3b82f6";
@@ -95,6 +95,63 @@ async function openPlaceUrl(placeUrl?: string | null) {
   }
 }
 
+function isPartnerVendor(vendor: ExpertVendor) {
+  return vendor.isPartner === true && !!vendor.companyId;
+}
+
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function withDistanceFromUser(vendors: ExpertVendor[], coords: Coordinates): ExpertVendor[] {
+  return vendors.map((vendor) => {
+    if (vendor.latitude == null || vendor.longitude == null) {
+      return vendor;
+    }
+
+    return {
+      ...vendor,
+      distanceKm: calculateDistanceKm(
+          coords.latitude,
+          coords.longitude,
+          vendor.latitude,
+          vendor.longitude,
+      ),
+    };
+  });
+}
+
+function sortPartnerFirstByDistance(vendors: ExpertVendor[]) {
+  return [...vendors].sort((a, b) => {
+    const partnerDiff = Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
+    if (partnerDiff !== 0) return partnerDiff;
+
+    const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+    const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+    if (da !== db) return da - db;
+
+    return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+  });
+}
+
+function sortPartnerFirstByName(vendors: ExpertVendor[]) {
+  return [...vendors].sort((a, b) => {
+    const partnerDiff = Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
+    if (partnerDiff !== 0) return partnerDiff;
+
+    return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+  });
+}
+
 export default function Expert() {
   const { historyId, issueType } = useLocalSearchParams<{ historyId?: string; issueType?: string }>();
 
@@ -109,8 +166,10 @@ export default function Expert() {
   const [sortAscending, setSortAscending] = useState(true);
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const [requestingLocation, setRequestingLocation] = useState(false);
+  const [locationSortEnabled, setLocationSortEnabled] = useState(false);
   // ref로 최신 좌표를 항상 읽을 수 있게 유지 (loadVendors 클로저 stale 문제 방지)
   const userCoordinatesRef = useRef<Coordinates | null>(null);
+  const autoLocationDoneRef = useRef(false);
 
   // --- [원본 데이터 로딩 로직] ---
   useEffect(() => {
@@ -146,22 +205,76 @@ export default function Expert() {
     userCoordinatesRef.current = userCoordinates;
   }, [userCoordinates]);
 
-  // --- [원본 위치 획득 로직] ---
+  async function findNearestRegionFromVendors(coords: Coordinates): Promise<VendorRegion> {
+    const issueKeyword = issueTypeSearchKeyword(resolvedIssueType);
+
+    const results = await Promise.allSettled(
+        VENDOR_REGIONS.map(async (region): Promise<{ region: VendorRegion; nearestDistance: number }> => {
+          const typedRegion = region as VendorRegion;
+          const regionCoords = REGION_COORDS[typedRegion];
+          const vendors = await listNearbyCompanies({
+            latitude: regionCoords.latitude,
+            longitude: regionCoords.longitude,
+            region,
+            keyword: `${region} ${issueKeyword}`.trim(),
+          });
+
+          const withDistance = withDistanceFromUser(vendors, coords).filter(
+              (vendor) => vendor.distanceKm != null && Number.isFinite(vendor.distanceKm),
+          );
+
+          const nearestDistance = withDistance.length > 0
+              ? Math.min(...withDistance.map((vendor) => vendor.distanceKm ?? Number.POSITIVE_INFINITY))
+              : Number.POSITIVE_INFINITY;
+
+          return { region: typedRegion, nearestDistance };
+        }),
+    );
+
+    type RegionCandidate = { region: VendorRegion; nearestDistance: number };
+
+    const candidates = results
+        .filter((result): result is PromiseFulfilledResult<RegionCandidate> => result.status === "fulfilled")
+        .map((result) => result.value)
+        .filter((item) => Number.isFinite(item.nearestDistance))
+        .sort((a, b) => a.nearestDistance - b.nearestDistance);
+
+    if (candidates.length > 0) {
+      return candidates[0].region;
+    }
+
+    // 외부검색이 비어 있으면 지역 중심점 기준으로 fallback.
+    return (Object.entries(REGION_COORDS) as [VendorRegion, Coordinates][])
+        .map(([region, center]) => ({
+          region,
+          distance: calculateDistanceKm(coords.latitude, coords.longitude, center.latitude, center.longitude),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0]?.region ?? "서울";
+  }
+
+  // --- [위치 획득 로직] ---
   async function handleGetCurrentLocation() {
     try {
       setRequestingLocation(true);
       const coords = await requestCurrentCoordinates();
+
+      userCoordinatesRef.current = coords;
       setUserCoordinates(coords);
-      if (selectedRegion) {
-        await loadVendors(selectedRegion, sortKey, sortAscending, coords); // coords 직접 전달
-      }
-      Alert.alert("위치 확인 완료", "가까운 업체 순 거리 정보가 업데이트되었습니다.");
+      setLocationSortEnabled(true);
+
+      const nextRegion = selectedRegion ?? await findNearestRegionFromVendors(coords);
+      setSelectedRegion(nextRegion);
+      setSortKey("name");
+      setSortAscending(true);
+
+      await loadVendors(nextRegion, "name", true, coords, true);
+      Alert.alert("위치 확인 완료", "현재 위치 기준으로 가까운 업체를 정렬했습니다.");
     } catch (error: any) {
       const message = String(error?.message ?? "");
       if (message === "LOCATION_SERVICE_DISABLED") {
         Alert.alert("위치 서비스 꺼짐", "휴대폰 위치 서비스를 켠 뒤 다시 시도해주세요.");
       } else if (message === "LOCATION_PERMISSION_DENIED") {
-        Alert.alert("위치 권한 거부", "권한이 필요합니다.");
+        Alert.alert("위치 권한 거부", "위치 권한을 허용해야 가까운 업체순으로 볼 수 있습니다.");
       } else {
         Alert.alert("위치 확인 실패", "현재 위치를 가져오지 못했습니다.");
       }
@@ -170,89 +283,129 @@ export default function Expert() {
     }
   }
 
-  // --- [업체 조회 로직 - 개편] ---
-  // 설계 원칙:
-  //  - 백엔드에 등록된 업체 = 제휴 업체(isPartner=true).
-  //  - 외부 지도 검색 결과 = 일반 업체(isPartner=false).
-  //  - GPS 가 있으면 백엔드 /api/companies/nearby 가 두 소스를 합쳐서
-  //    "제휴 우선 → 거리순" 으로 정렬해 반환한다. 프론트는 그 결과만 그대로 보여주면 된다.
-  //  - GPS 가 없으면 /api/experts/vendors (제휴 업체 전용) 로 폴백한다.
-  //  - 키워드는 이슈 중심으로 전달하고, 백엔드가 반경/보강 검색을 수행한다.
-  // coords 파라미터를 명시적으로 받아서 userCoordinates 클로저 의존성 제거
-  const loadVendors = useCallback(async (region: string, nextSortKey = sortKey, nextAscending = sortAscending, coords = userCoordinatesRef.current) => {
+  const loadVendors = useCallback(async (
+      region: string,
+      nextSortKey = sortKey,
+      nextAscending = sortAscending,
+      coords = userCoordinatesRef.current,
+      useDistanceSort = locationSortEnabled,
+  ) => {
     try {
       setVendorsLoading(true);
 
-      // GPS 있음 → 외부검색+제휴 통합 엔드포인트 사용 (백엔드가 정렬/보강 검색 수행)
-      if (coords) {
-        // 지역명을 강하게 붙이면 좌표/반경 기반 검색에서 오히려 0건이 나는 케이스가 있어
-        // 이슈 중심 키워드만 전달하고, 백엔드가 후보 키워드/반경 fallback을 적용한다.
-        const keyword = `${region} ${issueTypeSearchKeyword(resolvedIssueType)}`.trim();
-        const nearbyVendors = await listNearbyCompanies({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          region,
-          keyword,
-        });
+      const regionCoords = REGION_COORDS[region as VendorRegion];
+      const keyword = `${region} ${issueTypeSearchKeyword(resolvedIssueType)}`.trim();
 
-        // 클라이언트 정렬 옵션 반영 (가격순/별점순) - 단, "제휴 우선" 은 항상 유지한다.
-        const sorted = [...nearbyVendors].sort((a, b) => {
-          // 1) 제휴 업체 우선
-          const partnerDiff = Number(!!b.isPartner) - Number(!!a.isPartner);
-          if (partnerDiff !== 0) return partnerDiff;
-          // 2) 사용자가 고른 정렬키
-          const direction = nextAscending ? 1 : -1;
-          if (nextSortKey === "price") {
-            return (a.minPrice - b.minPrice) * direction;
+      // 중요: 다른 지역 탭을 눌렀을 때도 외부업체가 보여야 하므로,
+      // 업체 검색 좌표는 항상 해당 지역 중심 좌표를 사용한다.
+      // 단, 거리 계산은 사용자의 실제 현재 위치 coords로 다시 계산한다.
+      if (regionCoords) {
+        try {
+          const regionVendors = await listNearbyCompanies({
+            latitude: regionCoords.latitude,
+            longitude: regionCoords.longitude,
+            region,
+            keyword,
+          });
+
+          if (regionVendors.length > 0) {
+            if (useDistanceSort && coords) {
+              setVendors(sortPartnerFirstByDistance(withDistanceFromUser(regionVendors, coords)));
+            } else {
+              setVendors(sortPartnerFirstByName(regionVendors));
+            }
+            return;
           }
-          if (nextSortKey === "rating") {
-            return (a.rating - b.rating) * direction;
-          }
-          // 3) 그 외엔 거리순 (GPS 기반 화면의 기본값)
-          const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
-          const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
-          return da - db;
-        });
-        setVendors(sorted);
-        return;
+        } catch (err) {
+          console.log("지역 중심 업체 조회 실패. 제휴업체 API로 fallback:", err);
+        }
       }
 
-      // GPS 없음 → 제휴 업체 전용 엔드포인트로 폴백
       const baseVendors = await listExpertVendors({
         region,
         issueType: resolvedIssueType,
         sortKey: nextSortKey,
         direction: nextAscending ? "asc" : "desc",
       });
-      setVendors(baseVendors);
+
+      if (useDistanceSort && coords) {
+        setVendors(sortPartnerFirstByDistance(withDistanceFromUser(baseVendors, coords)));
+      } else {
+        setVendors(sortPartnerFirstByName(baseVendors));
+      }
     } catch {
       setVendors([]);
       Alert.alert("조회 실패", "전문업체 API 정보를 확인해주세요.");
     } finally {
       setVendorsLoading(false);
     }
-  }, [resolvedIssueType, sortKey, sortAscending]); // userCoordinates는 파라미터로 받으므로 deps 제외
+  }, [resolvedIssueType, sortKey, sortAscending, locationSortEnabled]);
+
+  useEffect(() => {
+    if (loading || !info || autoLocationDoneRef.current) return;
+
+    autoLocationDoneRef.current = true;
+
+    (async () => {
+      try {
+        setRequestingLocation(true);
+        const coords = await requestCurrentCoordinates();
+
+        userCoordinatesRef.current = coords;
+        setUserCoordinates(coords);
+        setLocationSortEnabled(true);
+
+        const nearestRegion = await findNearestRegionFromVendors(coords);
+        setSelectedRegion(nearestRegion);
+        setSortKey("name");
+        setSortAscending(true);
+
+        await loadVendors(nearestRegion, "name", true, coords, true);
+      } catch {
+        // 위치 권한이 없으면 기본 지역을 보여주되, 거리순이 아니라 가나다순으로 보여준다.
+        const fallbackRegion = "서울";
+        setSelectedRegion(fallbackRegion);
+        setLocationSortEnabled(false);
+        await loadVendors(fallbackRegion, "name", true, null, false);
+      } finally {
+        setRequestingLocation(false);
+      }
+    })();
+  }, [loading, info, resolvedIssueType, loadVendors]);
 
   useFocusEffect(
       useCallback(() => {
         if (selectedRegion) {
-          loadVendors(selectedRegion, sortKey, sortAscending);
+          loadVendors(
+              selectedRegion,
+              sortKey,
+              sortAscending,
+              userCoordinatesRef.current,
+              locationSortEnabled,
+          );
         }
-      }, [selectedRegion, sortKey, sortAscending, loadVendors])
+      }, [selectedRegion, sortKey, sortAscending, locationSortEnabled, loadVendors])
   );
 
   const handleSortPress = (nextKey: ExpertVendorSort) => {
     const nextAscending = sortKey === nextKey ? !sortAscending : true;
     setSortKey(nextKey);
     setSortAscending(nextAscending);
+
     if (selectedRegion) {
-      loadVendors(selectedRegion, nextKey, nextAscending);
+      loadVendors(
+          selectedRegion,
+          nextKey,
+          nextAscending,
+          userCoordinatesRef.current,
+          locationSortEnabled,
+      );
     }
   };
 
   const vendorsWithDistance = useMemo(() => vendors, [vendors]);
   const partnerCount = useMemo(
-      () => vendorsWithDistance.filter((v) => v.isPartner).length,
+      () => vendorsWithDistance.filter(isPartnerVendor).length,
       [vendorsWithDistance],
   );
   const externalCount = vendorsWithDistance.length - partnerCount;
@@ -304,7 +457,7 @@ export default function Expert() {
             <View style={{ flex: 1 }}>
               <Text style={styles.locationTitle}>내 위치 기준 거리 보기</Text>
               <Text style={styles.locationDesc}>
-                {userCoordinates ? "현재 위치 확인 완료" : "업체와의 거리를 표시합니다."}
+                {userCoordinates ? "현재 위치 기준 거리순으로 표시 중" : "현재 위치를 확인해 가까운 업체를 보여줍니다."}
               </Text>
             </View>
             <Pressable
@@ -334,10 +487,13 @@ export default function Expert() {
                   <Pressable
                       key={region}
                       onPress={() => {
+                        const coords = userCoordinatesRef.current;
+                        const useDistance = !!coords;
                         setSelectedRegion(region);
-                        setSortKey("price");
+                        setSortKey("name");
                         setSortAscending(true);
-                        loadVendors(region, "price", true);
+                        setLocationSortEnabled(useDistance);
+                        loadVendors(region, "name", true, coords, useDistance);
                       }}
                       style={[styles.regionChip, selectedRegion === region && styles.regionChipActive]}
                   >
@@ -355,7 +511,7 @@ export default function Expert() {
                     <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
                     {vendorsWithDistance.length > 0 && (
                         <Text style={styles.listSubCount}>
-                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳
+                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳{locationSortEnabled ? " · 거리순" : " · 가나다순"}
                         </Text>
                     )}
                   </View>
@@ -381,22 +537,22 @@ export default function Expert() {
                     <View style={styles.emptyBox}>
                       <Feather name="info" size={24} color="#94a3b8" />
                       <Text style={styles.emptyText}>
-                        {userCoordinates
-                            ? "주변에 검색된 업체가 없습니다. 다른 지역/증상으로 다시 시도해 주세요."
-                            : "위치 갱신 버튼을 눌러 내 주변 업체를 검색해 주세요."}
+                        {locationSortEnabled
+                            ? "현재 위치 기준으로 검색된 업체가 없습니다. 다른 지역을 선택해 주세요."
+                            : "선택한 지역에 표시할 업체가 없습니다. 다른 지역을 선택해 주세요."}
                       </Text>
                     </View>
                 ) : (
                     vendorsWithDistance.map((vendor) => (
                         <View
                             key={vendor.id}
-                            style={[styles.vendorCard, vendor.isPartner === true && !!vendor.companyId && styles.vendorCardPartner]}
+                            style={[styles.vendorCard, isPartnerVendor(vendor) && styles.vendorCardPartner]}
                         >
                           <View style={styles.vendorMain}>
                             <View style={styles.vendorInfo}>
                               <View style={styles.vendorNameRow}>
                                 <Text style={styles.vendorName}>{vendor.name}</Text>
-                                {vendor.isPartner === true && !!vendor.companyId ? (
+                                {isPartnerVendor(vendor) ? (
                                     <View style={styles.partnerBadge}>
                                       <FontAwesome name="handshake-o" size={11} color="#fff" />
                                       <Text style={styles.partnerBadgeText}>제휴</Text>
@@ -453,7 +609,7 @@ export default function Expert() {
                               <Text style={styles.coverageText}>활동 지역: {vendor.coverageAreas.join(", ")}</Text>
                           ) : null}
 
-                          {vendor.isPartner === true && !!vendor.companyId ? (
+                          {isPartnerVendor(vendor) ? (
                               <Pressable
                                   onPress={() => router.push({
                                     pathname: "/expert-booking",

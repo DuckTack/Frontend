@@ -40,24 +40,43 @@ export type FrontendGeneratedPdfResponse = {
 };
 
 export type SaveReportDraftRequest = {
-    repairMethod: string;
+    repairMethod: "" | "DIY" | "PRO";
     repairDate: string;
     contractorName: string;
     contractorContact: string;
     repairSummary: string;
     actualCostKrw: number;
     notes: string;
-    materialCost: string;
-    laborCost: string;
     totalCost: string;
     diyMaterialsUsed: string;
     diyMaterialCost: string;
     diyWorkMemo: string;
+    /** 구버전 백엔드 호환용. 전문업체 수리에서는 더 이상 사용하지 않음. */
+    materialCost?: string;
+    laborCost?: string;
     beforeImageKeys?: string[];
     afterImageKeys?: string[];
     diagnosisImageKeys?: string[];
     useDiagnosisImagesAsBefore?: boolean;
     templateVersion?: string;
+};
+
+export type RemoteReportDraft = {
+    diagnosisId?: string | number;
+    repairMethod?: string | null;
+    repairDate?: string | null;
+    contractorName?: string | null;
+    contractorContact?: string | null;
+    repairSummary?: string | null;
+    actualCostKrw?: number | string | null;
+    notes?: string | null;
+    totalCost?: string | number | null;
+    diyMaterialsUsed?: string | null;
+    diyMaterialCost?: string | number | null;
+    diyWorkMemo?: string | null;
+    beforeImageUris?: string[] | null;
+    afterImageUris?: string[] | null;
+    updatedAt?: string | null;
 };
 
 function statusFromHistory(history: HistoryDetail): ReportStatus {
@@ -138,6 +157,16 @@ export async function getPdfUrl(
         `/api/reports/diagnosis/${diagnosisId}/pdf-url`
     );
     return String(res.data?.data ?? res.data);
+}
+
+export async function getReportDraft(
+    diagnosisId: string | number
+): Promise<RemoteReportDraft | null> {
+    const res = await apiClient.get(
+        `/api/reports/diagnosis/${diagnosisId}/draft`
+    );
+
+    return res.data?.data ?? res.data ?? null;
 }
 
 export async function openReportPdf(
@@ -248,6 +277,7 @@ export async function uploadFrontendGeneratedPdf(
             headers: {
                 "Content-Type": "multipart/form-data",
             },
+            timeout: 120000,
         }
     );
 

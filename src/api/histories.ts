@@ -1,6 +1,17 @@
 import { apiClient } from "./apiClient";
 
-export type IssueType = "CRACK" | "LEAK" | "MOLD" | "DAMAGE" | "ELECTRIC" | "GAS" | "ETC";
+export type IssueType =
+  | "CRACK"
+  | "LEAK"
+  | "MOLD"
+  | "PEEL"
+  | "PAINT_PEEL"
+  | "CORROSION"
+  | "BULGE"
+  | "DAMAGE"
+  | "ELECTRIC"
+  | "GAS"
+  | "ETC";
 export type DiagnosisStatus = "ANALYZING" | "COMPLETED" | "FAILED";
 export type Recommendation = "DIY" | "PRO";
 
@@ -30,6 +41,16 @@ export type HistorySummary = {
   kakaoPlaceAddress?: string;
   kakaoPlaceLat?: number;
   kakaoPlaceLng?: number;
+  reservationId?: string;
+  reservationStatus?: string;
+  expertVendorPhone?: string;
+  companyPhone?: string;
+  repairCompletedDate?: string;
+  repairTotalCost?: number;
+  repairSummary?: string;
+  reservationRepairCompletedDate?: string;
+  reservationRepairTotalCost?: number;
+  reservationRepairSummary?: string;
   reviewWritten?: boolean;
   report?: {
     storageKey: string;
@@ -66,7 +87,8 @@ function normalizeUrl(url: string): string {
 function pickImageUris(raw: any): string[] {
   // 단수 imageUrl (새 파이프라인 DiagnosisResult.imageUrl) 처리
   if (raw?.imageUrl && typeof raw.imageUrl === "string") return [normalizeUrl(raw.imageUrl)];
-  const direct = stringList(raw?.imageUris ?? raw?.imageUrls ?? raw?.diagnosisImageUrls ?? raw?.beforeImageUrls ?? raw?.diagnosis?.beforeImageUrls);
+  const direct = stringList(raw?.imageUris ?? raw?.imageUrls ?? raw?.diagnosisImageUrls ?? raw?.beforeImageUrls ?? raw?.diagnosis?.beforeImageUrls)
+    .map(normalizeUrl);
   if (direct.length > 0) return direct;
 
   const imageObjects = Array.isArray(raw?.images)
@@ -78,7 +100,8 @@ function pickImageUris(raw: any): string[] {
   return imageObjects
     .map((img: any) => img?.url ?? img?.imageUrl ?? img?.fileUrl ?? img?.uri)
     .map((uri: any) => String(uri ?? ""))
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(normalizeUrl);
 }
 
 function pickImageKeys(raw: any): string[] {
@@ -109,6 +132,8 @@ function normalizeHistoryItem(raw: any): HistorySummary {
     issueType: (raw?.issueType ?? "ETC") as IssueType,
     createdAt: raw?.createdAt ?? new Date().toISOString(),
     recommendation: (raw?.recommendation as Recommendation) ?? toRecommendation(riskScore),
+    reservationId: raw?.reservationId ? String(raw.reservationId) : undefined,
+    reservationStatus: raw?.reservationStatus ? String(raw.reservationStatus) : undefined,
     imageUris: pickImageUris(raw),
     diagnosisImageKeys: pickImageKeys(raw),
     cause: raw?.cause ? String(raw.cause) : undefined,
@@ -117,9 +142,25 @@ function normalizeHistoryItem(raw: any): HistorySummary {
     companyId: raw?.companyId ? String(raw.companyId) : raw?.expertCompanyId ? String(raw.expertCompanyId) : undefined,
     expertVendorId: raw?.expertVendorId ? String(raw.expertVendorId) : raw?.vendorId ? String(raw.vendorId) : undefined,
     expertVendorName: raw?.expertVendorName ? String(raw.expertVendorName) : raw?.vendorName ? String(raw.vendorName) : raw?.kakaoPlaceName ? String(raw.kakaoPlaceName) : undefined,
+    expertVendorPhone: raw?.expertVendorPhone ? String(raw.expertVendorPhone) : raw?.companyPhone ? String(raw.companyPhone) : raw?.vendorPhone ? String(raw.vendorPhone) : undefined,
+    companyPhone: raw?.companyPhone ? String(raw.companyPhone) : raw?.expertVendorPhone ? String(raw.expertVendorPhone) : undefined,
+    repairCompletedDate: raw?.repairCompletedDate ? String(raw.repairCompletedDate) : raw?.reservationRepairCompletedDate ? String(raw.reservationRepairCompletedDate) : undefined,
+    repairTotalCost: toNumberOrUndefined(raw?.repairTotalCost ?? raw?.reservationRepairTotalCost),
+    repairSummary: raw?.repairSummary ? String(raw.repairSummary) : raw?.reservationRepairSummary ? String(raw.reservationRepairSummary) : undefined,
+    reservationRepairCompletedDate: raw?.reservationRepairCompletedDate ? String(raw.reservationRepairCompletedDate) : raw?.repairCompletedDate ? String(raw.repairCompletedDate) : undefined,
+    reservationRepairTotalCost: toNumberOrUndefined(raw?.reservationRepairTotalCost ?? raw?.repairTotalCost),
+    reservationRepairSummary: raw?.reservationRepairSummary ? String(raw.reservationRepairSummary) : raw?.repairSummary ? String(raw.repairSummary) : undefined,
     kakaoPlaceId: raw?.kakaoPlaceId ? String(raw.kakaoPlaceId) : undefined,
     kakaoPlaceName: raw?.kakaoPlaceName ? String(raw.kakaoPlaceName) : raw?.expertVendorName ? String(raw.expertVendorName) : raw?.vendorName ? String(raw.vendorName) : undefined,
-    kakaoPlacePhone: raw?.kakaoPlacePhone ? String(raw.kakaoPlacePhone) : raw?.vendorPhone ? String(raw.vendorPhone) : undefined,
+    kakaoPlacePhone: raw?.kakaoPlacePhone
+      ? String(raw.kakaoPlacePhone)
+      : raw?.expertVendorPhone
+        ? String(raw.expertVendorPhone)
+        : raw?.companyPhone
+          ? String(raw.companyPhone)
+          : raw?.vendorPhone
+            ? String(raw.vendorPhone)
+            : undefined,
     kakaoPlaceAddress: raw?.kakaoPlaceAddress ? String(raw.kakaoPlaceAddress) : raw?.vendorAddress ? String(raw.vendorAddress) : undefined,
     kakaoPlaceLat: toNumberOrUndefined(raw?.kakaoPlaceLat ?? raw?.vendorLatitude),
     kakaoPlaceLng: toNumberOrUndefined(raw?.kakaoPlaceLng ?? raw?.vendorLongitude),

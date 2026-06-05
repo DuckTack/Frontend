@@ -23,19 +23,22 @@ import { getHistoryDetail, HistoryDetail } from "../../src/api/histories";
 // getCachedDiagnosisImages 는 미구현 상태이므로 제거 (diagnosis.ts에 없음)
 import {
   getPdfUrl,
+  getReportDraft,
   saveReportDraft,
   type ReportStatus,
   uploadFrontendGeneratedPdf,
-  uploadReportImages,
 } from "../../src/api/reports";
-import { apiClient } from "../../src/api/apiClient";
 import {
   EMPTY_DRAFT,
+  loadReportDraft,
+  saveLocalReportDraft,
   type ReportDraft,
 } from "../../src/store/reportDraftStorage";
 import { createDesignedReportPdf } from "../../src/utils/reportPdf";
 
 const MAIN_BLUE = "#3b82f6";
+const MAX_BEFORE_EXTRA_IMAGES = 2;
+const MAX_AFTER_IMAGES = 3;
 
 type ImageField = "beforeImageUris" | "afterImageUris";
 
@@ -62,61 +65,201 @@ function reportStatusFromHistory(history: HistoryDetail): ReportStatus {
 }
 
 function createEmptyDraft(): ReportDraft {
-  return {
-    ...EMPTY_DRAFT,
-    beforeImageUris: [],
-    afterImageUris: [],
-  };
-}
-
-function normalizeServerDraft(raw: any): ReportDraft {
-  const body = raw?.data?.data ?? raw?.data ?? raw ?? {};
-
-  return {
-    ...createEmptyDraft(),
-    repairMethod: body.repairMethod ?? "",
-    repairDate: body.repairDate ?? "",
-    contractorName: body.contractorName ?? "",
-    contractorContact: body.contractorContact ?? "",
-    repairSummary: body.repairSummary ?? "",
-    totalCost: body.totalCost ?? "",
-    materialCost: body.materialCost ?? "",
-    laborCost: body.laborCost ?? "",
-    diyMaterialsUsed: body.diyMaterialsUsed ?? "",
-    diyMaterialCost: body.diyMaterialCost ?? "",
-    diyWorkMemo: body.diyWorkMemo ?? "",
-    notes: body.notes ?? "",
-
-    /*
-     * 진단 수리 전 사진은 history.imageUris에서 자동 반영한다.
-     * draft.beforeImageUris에 서버 beforeImageUris를 넣으면 같은 사진이 중복되거나,
-     * 예전 추가 첨부가 계속 보일 수 있어서 새 화면 진입 시에는 비운다.
-     */
-    beforeImageUris: [],
-
-    /*
-     * 수리 후 사진은 서버에 저장된 AFTER_IMAGE가 있을 때만 복원한다.
-     * report_draft와 file_record를 지웠다면 여기 역시 빈 배열이 된다.
-     */
-    afterImageUris: Array.isArray(body.afterImageUris) ? body.afterImageUris.filter(Boolean) : [],
-  };
-}
-
-async function getServerReportDraft(diagnosisId: string | number): Promise<ReportDraft> {
-  const res = await apiClient.get(`/api/reports/diagnosis/${diagnosisId}/draft`);
-  return normalizeServerDraft(res.data);
+  return { ...EMPTY_DRAFT };
 }
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function formatTodayDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function cleanAutoValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+
+  const text = String(value).trim();
+
+  if (!text) return "";
+  if (text === "0") return "";
+  if (text.toLowerCase() === "undefined") return "";
+  if (text.toLowerCase() === "null") return "";
+  if (text === "전문업체") return "";
+  if (text.startsWith("업체 #")) return "";
+
+  return text;
+}
+
+function normalizeCost(value: unknown): string {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? String(value) : "";
+  }
+
+  const text = cleanAutoValue(value).replace(/,/g, "");
+  if (!text || text === "0") return "";
+
+  return text;
+}
+
+function normalizeRepairMethod(value: unknown): "" | "DIY" | "PRO" {
+  const text = cleanAutoValue(value).toUpperCase();
+  if (text === "DIY") return "DIY";
+  if (text === "PRO") return "PRO";
+  return "";
+}
+
+function formatDisplayDate(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+
+  if (Array.isArray(value)) {
+    const [year, month, day] = value;
+    if (!year || !month || !day) return "-";
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const text = cleanAutoValue(value);
+  if (!text) return "-";
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    return text.slice(0, 10);
+  }
+
+  const asNumber = Number(text);
+  if (Number.isFinite(asNumber) && asNumber > 0) {
+    const date = new Date(asNumber > 10_000_000_000 ? asNumber : asNumber * 1000);
+    if (!Number.isNaN(date.getTime()) && date.getFullYear() > 2000) {
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
+  const date = new Date(text);
+  if (!Number.isNaN(date.getTime()) && date.getFullYear() > 2000) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  return "-";
+}
+
+function getReservedCompanyName(historyData: HistoryDetail | null): string {
+  const h: any = historyData;
+
+  return (
+    cleanAutoValue(h?.expertVendorName) ||
+    cleanAutoValue(h?.companyName) ||
+    cleanAutoValue(h?.kakaoPlaceName) ||
+    cleanAutoValue(h?.vendorName) ||
+    ""
+  );
+}
+
+function getReservedCompanyPhone(historyData: HistoryDetail | null): string {
+  const h: any = historyData;
+
+  return (
+    cleanAutoValue(h?.expertVendorPhone) ||
+    cleanAutoValue(h?.companyPhone) ||
+    cleanAutoValue(h?.kakaoPlacePhone) ||
+    cleanAutoValue(h?.vendorPhone) ||
+    cleanAutoValue(h?.phone) ||
+    ""
+  );
+}
+
+type RemoteReportDraft = {
+  repairMethod?: string | null;
+  repairDate?: string | null;
+  contractorName?: string | null;
+  contractorContact?: string | null;
+  repairSummary?: string | null;
+  actualCostKrw?: number | string | null;
+  notes?: string | null;
+  totalCost?: string | number | null;
+  diyMaterialsUsed?: string | null;
+  diyMaterialCost?: string | number | null;
+  diyWorkMemo?: string | null;
+  beforeImageUris?: string[] | null;
+  afterImageUris?: string[] | null;
+};
+
+function mergeRemoteDraft(localDraft: ReportDraft, remoteDraft?: RemoteReportDraft | null): ReportDraft {
+  if (!remoteDraft) return localDraft;
+
+  const remoteTotalCost =
+    normalizeCost(remoteDraft.totalCost) || normalizeCost(remoteDraft.actualCostKrw);
+
+  return {
+    ...localDraft,
+    repairMethod: normalizeRepairMethod(remoteDraft.repairMethod) || localDraft.repairMethod,
+    repairDate: cleanAutoValue(remoteDraft.repairDate) || localDraft.repairDate,
+    contractorName: cleanAutoValue(remoteDraft.contractorName) || localDraft.contractorName,
+    contractorContact: cleanAutoValue(remoteDraft.contractorContact) || localDraft.contractorContact,
+    repairSummary: cleanAutoValue(remoteDraft.repairSummary) || localDraft.repairSummary,
+    totalCost: remoteTotalCost || localDraft.totalCost,
+    notes: cleanAutoValue(remoteDraft.notes) || localDraft.notes,
+    diyMaterialsUsed: cleanAutoValue(remoteDraft.diyMaterialsUsed) || localDraft.diyMaterialsUsed,
+    diyMaterialCost: normalizeCost(remoteDraft.diyMaterialCost) || localDraft.diyMaterialCost,
+    diyWorkMemo: cleanAutoValue(remoteDraft.diyWorkMemo) || localDraft.diyWorkMemo,
+    /*
+     * 서버에 이미 업로드된 이미지 목록을 다시 병합하면, PDF 생성 실패 후 재진입 시
+     * 같은 사진이 계속 누적되어 보이고 PDF 용량도 커진다.
+     * 프론트 PDF 생성 방식에서는 로컬에 사용자가 첨부한 사진 + 진단 사진만 사용한다.
+     */
+    beforeImageUris: uniqueStrings(localDraft.beforeImageUris).slice(0, MAX_BEFORE_EXTRA_IMAGES),
+    afterImageUris: uniqueStrings(localDraft.afterImageUris).slice(0, MAX_AFTER_IMAGES),
+  };
+}
+
+function applyReservedCompanyToDraft(
+  draft: ReportDraft,
+  historyData: HistoryDetail | null,
+): ReportDraft {
+  const contractorName = getReservedCompanyName(historyData);
+  const contractorContact = getReservedCompanyPhone(historyData);
+  const hasReservedCompany = Boolean(contractorName || contractorContact);
+
+  if (!hasReservedCompany) return draft;
+
+  return {
+    ...draft,
+    repairMethod: draft.repairMethod || "PRO",
+    contractorName: contractorName || draft.contractorName,
+    contractorContact: contractorContact || draft.contractorContact,
+  };
+}
+
+function applyReservationRepairInfoToDraft(
+  draft: ReportDraft,
+  historyData: HistoryDetail | null,
+): ReportDraft {
+  const h: any = historyData;
+  if (!h) return draft;
+
+  const repairCompletedDate = cleanAutoValue(
+    h.repairCompletedDate || h.reservationRepairCompletedDate,
+  );
+  const repairTotalCost = normalizeCost(
+    h.repairTotalCost ?? h.reservationRepairTotalCost ?? h.totalCost,
+  );
+  const repairSummary = cleanAutoValue(
+    h.repairSummary || h.reservationRepairSummary,
+  );
+
+  const contractorName = getReservedCompanyName(historyData);
+  const contractorContact = getReservedCompanyPhone(historyData);
+
+  const hasRepairInfo = Boolean(
+    repairCompletedDate || repairTotalCost || repairSummary || contractorName || contractorContact,
+  );
+  if (!hasRepairInfo) return draft;
+
+  return {
+    ...draft,
+    repairMethod: "PRO",
+    repairDate: repairCompletedDate || draft.repairDate,
+    contractorName: contractorName || draft.contractorName,
+    contractorContact: contractorContact || draft.contractorContact,
+    totalCost: repairTotalCost || draft.totalCost,
+    repairSummary: repairSummary || draft.repairSummary,
+  };
 }
 
 export default function ReportDetail() {
@@ -135,8 +278,7 @@ export default function ReportDetail() {
       reportId: String(reportId ?? history.id),
       historyId: String(history.id),
       diagnosisId: String(history.diagnosisId ?? ""),
-      // 리포트 작성일시는 진단 생성일이 아니라 오늘 날짜로 고정
-      createdAt: formatTodayDate(),
+      createdAt: history.createdAt,
       issueType: history.issueType,
       riskScore: history.riskScore,
       recommendation: history.recommendation,
@@ -145,13 +287,13 @@ export default function ReportDetail() {
   }, [history, reportId]);
 
   const diagnosisBeforeImageUris = useMemo(
-      () => uniqueStrings([...(history?.imageUris ?? []), ...(cachedDiagnosisImages?.imageUris ?? [])]),
-      [history?.imageUris, cachedDiagnosisImages?.imageUris],
+    () => uniqueStrings([...(history?.imageUris ?? []), ...(cachedDiagnosisImages?.imageUris ?? [])]),
+    [history?.imageUris, cachedDiagnosisImages?.imageUris],
   );
 
   const diagnosisBeforeImageKeys = useMemo(
-      () => uniqueStrings([...(history?.diagnosisImageKeys ?? []), ...(cachedDiagnosisImages?.imageKeys ?? [])]),
-      [history?.diagnosisImageKeys, cachedDiagnosisImages?.imageKeys],
+    () => uniqueStrings([...(history?.diagnosisImageKeys ?? []), ...(cachedDiagnosisImages?.imageKeys ?? [])]),
+    [history?.diagnosisImageKeys, cachedDiagnosisImages?.imageKeys],
   );
 
   const load = useCallback(async () => {
@@ -159,36 +301,30 @@ export default function ReportDetail() {
       setLoading(true);
       if (!reportId) return;
 
-      /*
-       * Expo Router가 이전 화면 state를 유지할 수 있어서,
-       * 서버 조회 전에 먼저 완전히 초기화한다.
-       */
-      setDraft(createEmptyDraft());
-      setHistory(null);
-      setCachedDiagnosisImages(null);
-
-      const [meData, historyData] = await Promise.all([
+      const [meData, historyData, localDraftData] = await Promise.all([
         getMe().catch(() => null),
         getHistoryDetail(String(reportId)).catch(() => null),
+        loadReportDraft(String(reportId)).catch(() => null),
       ]);
+
+      const remoteDraftData = historyData?.diagnosisId
+        ? await getReportDraft(String(historyData.diagnosisId)).catch(() => null)
+        : null;
 
       setMe(meData);
       setHistory(historyData);
       setCachedDiagnosisImages(null); // 미구현 API — history.imageUris 로 대체됨
 
-      if (historyData?.diagnosisId) {
-        const serverDraft = await getServerReportDraft(String(historyData.diagnosisId)).catch((e) => {
-          console.log("server draft load failed:", e?.message ?? e);
-          return createEmptyDraft();
-        });
+      let nextDraft = mergeRemoteDraft(
+        localDraftData ?? createEmptyDraft(),
+        remoteDraftData,
+      );
+      nextDraft = applyReservedCompanyToDraft(nextDraft, historyData);
+      nextDraft = applyReservationRepairInfoToDraft(nextDraft, historyData);
 
-        setDraft(serverDraft);
-      } else {
-        setDraft(createEmptyDraft());
-      }
+      setDraft(nextDraft);
     } catch (e) {
-      console.error("데이터 로딩 실패:", e);
-      setDraft(createEmptyDraft());
+      console.log("데이터 로딩 실패:", e);
       Alert.alert("오류", "데이터를 불러오는 중 문제가 발생했습니다.");
     } finally {
       setLoading(false);
@@ -209,8 +345,8 @@ export default function ReportDetail() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 0.45,
-      selectionLimit: 3,
+      quality: 0.35,
+      selectionLimit: targetField === "afterImageUris" ? MAX_AFTER_IMAGES : MAX_BEFORE_EXTRA_IMAGES,
     });
 
     if (result.canceled) return;
@@ -218,10 +354,24 @@ export default function ReportDetail() {
     const uris = result.assets.map((asset) => asset.uri).filter(Boolean);
     if (uris.length === 0) return;
 
-    setDraft((prev) => ({
-      ...prev,
-      [targetField]: [...prev[targetField], ...uris],
-    }));
+    setDraft((prev) => {
+      const limit = targetField === "afterImageUris" ? MAX_AFTER_IMAGES : MAX_BEFORE_EXTRA_IMAGES;
+      const nextUris = uniqueStrings([...prev[targetField], ...uris]).slice(0, limit);
+
+      if (nextUris.length < prev[targetField].length + uris.length) {
+        Alert.alert(
+          "사진 첨부 제한",
+          targetField === "afterImageUris"
+            ? `수리 후 사진은 최대 ${MAX_AFTER_IMAGES}장까지 첨부할 수 있습니다.`
+            : `추가 수리 전 사진은 최대 ${MAX_BEFORE_EXTRA_IMAGES}장까지 첨부할 수 있습니다.`
+        );
+      }
+
+      return {
+        ...prev,
+        [targetField]: nextUris,
+      };
+    });
   }
 
   function removeImage(targetField: ImageField, index: number) {
@@ -236,55 +386,51 @@ export default function ReportDetail() {
 
     try {
       setSavingDraft(true);
+
       console.log("reportId:", reportId);
       console.log("history:", JSON.stringify(history, null, 2));
       console.log("reportBase:", reportBase);
 
       if (!reportBase?.diagnosisId) {
         if (showSuccessMessage) {
-          Alert.alert("임시 저장 완료", "진단 ID가 준비되면 서버 저장을 진행할 수 있습니다.");
+          Alert.alert("저장 대기 중", "진단 기록을 불러오는 중입니다. 잠시 후 다시 저장해주세요.");
         }
         return false;
       }
 
-      const [beforeUploads, afterUploads] = await Promise.all([
-        draft.beforeImageUris.length > 0
-            ? uploadReportImages(reportBase.diagnosisId, "BEFORE", draft.beforeImageUris)
-            : Promise.resolve([]),
+      const cleanedDraft: ReportDraft = {
+        ...draft,
+        beforeImageUris: uniqueStrings(draft.beforeImageUris).slice(0, MAX_BEFORE_EXTRA_IMAGES),
+        afterImageUris: uniqueStrings(draft.afterImageUris).slice(0, MAX_AFTER_IMAGES),
+      };
 
-        draft.afterImageUris.length > 0
-            ? uploadReportImages(reportBase.diagnosisId, "AFTER", draft.afterImageUris)
-            : Promise.resolve([]),
-      ]);
+      await saveLocalReportDraft(String(reportId), cleanedDraft);
+      setDraft(cleanedDraft);
 
       await saveReportDraft(String(reportBase.diagnosisId), {
-        repairMethod: draft.repairMethod,
-        repairDate: draft.repairDate,
-        contractorName: draft.contractorName,
-        contractorContact: draft.contractorContact,
-        repairSummary: draft.repairSummary,
-        actualCostKrw: Number(draft.totalCost || draft.materialCost || draft.diyMaterialCost || 0),
-        notes: draft.notes,
-        materialCost: draft.materialCost,
-        laborCost: draft.laborCost,
-        totalCost: draft.totalCost,
-        diyMaterialsUsed: draft.diyMaterialsUsed,
-        diyMaterialCost: draft.diyMaterialCost,
-        diyWorkMemo: draft.diyWorkMemo,
-        beforeImageKeys: beforeUploads.map((file) => file.fileKey).filter(Boolean),
-        afterImageKeys: afterUploads.map((file) => file.fileKey).filter(Boolean),
+        repairMethod: cleanedDraft.repairMethod,
+        repairDate: cleanedDraft.repairDate,
+        contractorName: cleanedDraft.contractorName,
+        contractorContact: cleanedDraft.contractorContact,
+        repairSummary: cleanedDraft.repairSummary,
+        actualCostKrw: Number(cleanedDraft.totalCost || cleanedDraft.diyMaterialCost || 0),
+        notes: cleanedDraft.notes,
+        totalCost: cleanedDraft.totalCost,
+        diyMaterialsUsed: cleanedDraft.diyMaterialsUsed,
+        diyMaterialCost: cleanedDraft.diyMaterialCost,
+        diyWorkMemo: cleanedDraft.diyWorkMemo,
         diagnosisImageKeys: diagnosisBeforeImageKeys,
         useDiagnosisImagesAsBefore: true,
         templateVersion: "FRONTEND_REPORT_V1",
       });
 
       if (showSuccessMessage) {
-        Alert.alert("저장 완료", "서버와 로컬 임시 저장이 완료되었습니다.");
+        Alert.alert("수리 정보 저장 완료", "작성한 수리 정보가 저장되었습니다.");
       }
 
       return true;
     } catch (e: any) {
-      console.error("report draft save failed");
+      console.log("report draft save failed");
 
       if (e.response) {
         console.log("status:", e.response.status);
@@ -296,7 +442,7 @@ export default function ReportDetail() {
         console.log("message:", e.message);
       }
 
-      Alert.alert("저장 실패", "서버 저장 중 문제가 발생했습니다. 이미지 업로드/드래프트 저장 API를 확인해주세요.");
+      Alert.alert("저장 실패", "수리 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.");
       return false;
     } finally {
       setSavingDraft(false);
@@ -308,7 +454,7 @@ export default function ReportDetail() {
 
   async function handleGenerate() {
     if (!reportBase?.diagnosisId || !history) {
-      Alert.alert("생성 불가", "진단 정보가 준비되지 않았습니다.");
+      Alert.alert("PDF 생성 불가", "진단 기록을 불러온 뒤 다시 시도해주세요.");
       return;
     }
 
@@ -318,27 +464,32 @@ export default function ReportDetail() {
       const saved = await saveDraftToServer(false);
       if (!saved) return;
 
+      const pdfDraft = applyReservationRepairInfoToDraft(
+        applyReservedCompanyToDraft(draft, history),
+        history,
+      );
+
       const pdf = await createDesignedReportPdf({
         reportId: reportBase.reportId,
         diagnosisId: reportBase.diagnosisId,
         createdAt: reportBase.createdAt,
         user: me,
         history,
-        draft,
+        draft: pdfDraft,
         beforeImages: uniqueStrings([
-          ...diagnosisBeforeImageUris,
-          ...draft.beforeImageUris,
+          ...diagnosisBeforeImageUris.slice(0, 1),
+          ...pdfDraft.beforeImageUris.slice(0, MAX_BEFORE_EXTRA_IMAGES),
         ]),
-        afterImages: draft.afterImageUris,
+        afterImages: uniqueStrings(pdfDraft.afterImageUris).slice(0, MAX_AFTER_IMAGES),
       });
 
       await uploadFrontendGeneratedPdf(reportBase.diagnosisId, pdf.uri);
 
-      Alert.alert("PDF 생성 완료", "PDF가 서버에 저장되었습니다.");
+      Alert.alert("PDF 생성 완료", "리포트 PDF가 생성되었습니다.\n이제 PDF를 열어 확인할 수 있습니다.");
       await load();
     } catch (e) {
-      console.error("frontend pdf generate failed", e);
-      Alert.alert("생성 실패", "프론트 PDF 생성 또는 PDF 업로드 API를 확인해주세요.");
+      console.log("frontend pdf generate failed", e);
+      Alert.alert("PDF 생성 실패", "PDF 파일 용량이 크거나 네트워크가 불안정해 저장하지 못했습니다. 사진 수를 줄인 뒤 다시 시도해주세요.");
     } finally {
       setGeneratingPdf(false);
     }
@@ -349,7 +500,7 @@ export default function ReportDetail() {
       const url = await getPdfUrl(reportBase.diagnosisId);
       if (url) await Linking.openURL(url);
     } catch {
-      Alert.alert("열기 실패", "PDF 주소를 가져올 수 없습니다.");
+      Alert.alert("PDF 열기 실패", "생성된 PDF를 불러오지 못했습니다. 먼저 PDF를 다시 생성해주세요.");
     }
   }
 
@@ -357,158 +508,156 @@ export default function ReportDetail() {
   if (!history) return <ScreenState title="리포트 없음" errorMessage="해당 리포트를 찾을 수 없습니다." />;
 
   return (
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: "#fff" }}>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Pressable onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={24} color="#1e293b" />
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: "#fff" }}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#1e293b" />
+          </Pressable>
+          <View>
+            <Text style={styles.headerTitle}>리포트 상세</Text>
+            <Text style={styles.headerSubtitle}>진단 결과 및 수리 내역을 확인하세요</Text>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person-circle-outline" size={20} color={MAIN_BLUE} />
+            <Text style={styles.cardTitle}>기본 정보</Text>
+          </View>
+          <View style={styles.infoRow}><Text style={styles.infoLabel}>리포트 ID</Text><Text style={styles.infoValue}>{reportBase?.reportId || "-"}</Text></View>
+          <View style={styles.infoRow}><Text style={styles.infoLabel}>작성일시</Text><Text style={styles.infoValue}>{formatDisplayDate(reportBase?.createdAt)}</Text></View>
+          <View style={styles.infoRow}><Text style={styles.infoLabel}>사용자</Text><Text style={styles.infoValue}>{me?.username || "-"}</Text></View>
+          <View style={styles.infoRow}><Text style={styles.infoLabel}>연락처</Text><Text style={styles.infoValue}>{me?.phoneNumber || "-"}</Text></View>
+          <View style={[styles.infoRow, { borderBottomWidth: 0 }]}><Text style={styles.infoLabel}>주소</Text><Text style={styles.infoValue}>{me?.address || "-"}</Text></View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#10b981" />
+            <Text style={styles.cardTitle}>자동 반영 정보</Text>
+          </View>
+          <View style={styles.badgeContainer}>
+            <View style={[styles.badge, { backgroundColor: '#eff6ff' }]}><Text style={[styles.badgeText, { color: MAIN_BLUE }]}>{fmtIssue(history.issueType)}</Text></View>
+            <View style={[styles.badge, { backgroundColor: '#fff7ed' }]}><Text style={[styles.badgeText, { color: '#f97316' }]}>위험도 {history.riskScore}</Text></View>
+            <View style={[styles.badge, { backgroundColor: '#f0fdf4' }]}><Text style={[styles.badgeText, { color: '#16a34a' }]}>{fmtRec(history.recommendation)}</Text></View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="create-outline" size={20} color="#6366f1" />
+            <Text style={styles.cardTitle}>수리 후 직접 입력</Text>
+          </View>
+
+          <View style={styles.tabContainer}>
+            <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "DIY" }))} style={[styles.tab, draft.repairMethod === "DIY" && styles.tabActive]}>
+              <Text style={[styles.tabText, draft.repairMethod === "DIY" && styles.tabTextActive]}>직접 수리</Text>
             </Pressable>
-            <View>
-              <Text style={styles.headerTitle}>리포트 상세</Text>
-              <Text style={styles.headerSubtitle}>진단 결과 및 수리 내역을 확인하세요</Text>
-            </View>
+            <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "PRO" }))} style={[styles.tab, draft.repairMethod === "PRO" && styles.tabActive]}>
+              <Text style={[styles.tabText, draft.repairMethod === "PRO" && styles.tabTextActive]}>전문업체 수리</Text>
+            </Pressable>
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="person-circle-outline" size={20} color={MAIN_BLUE} />
-              <Text style={styles.cardTitle}>기본 정보</Text>
-            </View>
-            <View style={styles.infoRow}><Text style={styles.infoLabel}>리포트 ID</Text><Text style={styles.infoValue}>{reportBase?.reportId || "-"}</Text></View>
-            <View style={styles.infoRow}><Text style={styles.infoLabel}>작성일시</Text><Text style={styles.infoValue}>{reportBase?.createdAt || formatTodayDate()}</Text></View>
-            <View style={styles.infoRow}><Text style={styles.infoLabel}>사용자</Text><Text style={styles.infoValue}>{me?.username || "-"}</Text></View>
-            <View style={styles.infoRow}><Text style={styles.infoLabel}>연락처</Text><Text style={styles.infoValue}>{me?.phoneNumber || "-"}</Text></View>
-            <View style={[styles.infoRow, { borderBottomWidth: 0 }]}><Text style={styles.infoLabel}>주소</Text><Text style={styles.infoValue}>{me?.address || "-"}</Text></View>
-          </View>
+          <TextInput
+            value={draft.repairDate}
+            onChangeText={(text) => setDraft((prev) => ({ ...prev, repairDate: text }))}
+            placeholder="수리 완료일 (예: 2026-04-06)"
+            style={styles.input}
+            placeholderTextColor="#94a3b8"
+          />
 
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#10b981" />
-              <Text style={styles.cardTitle}>자동 반영 정보</Text>
+          {draft.repairMethod === "DIY" ? (
+            <View style={{ gap: 10 }}>
+              <TextInput value={draft.diyMaterialsUsed} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialsUsed: text }))} placeholder="사용한 자재" style={styles.input} placeholderTextColor="#94a3b8" />
+              <TextInput value={draft.diyMaterialCost || draft.materialCost} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialCost: text, materialCost: text }))} placeholder="자재비" keyboardType="number-pad" style={styles.input} placeholderTextColor="#94a3b8" />
+              <TextInput value={draft.diyWorkMemo} multiline onChangeText={(text) => setDraft((p) => ({ ...p, diyWorkMemo: text }))} placeholder="직접 수리 메모" style={styles.textArea} placeholderTextColor="#94a3b8" />
             </View>
-            <View style={styles.badgeContainer}>
-              <View style={[styles.badge, { backgroundColor: '#eff6ff' }]}><Text style={[styles.badgeText, { color: MAIN_BLUE }]}>{fmtIssue(history.issueType)}</Text></View>
-              <View style={[styles.badge, { backgroundColor: '#fff7ed' }]}><Text style={[styles.badgeText, { color: '#f97316' }]}>위험도 {history.riskScore}</Text></View>
-              <View style={[styles.badge, { backgroundColor: '#f0fdf4' }]}><Text style={[styles.badgeText, { color: '#16a34a' }]}>{fmtRec(history.recommendation)}</Text></View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              <TextInput value={draft.contractorName} onChangeText={(text) => setDraft((p) => ({ ...p, contractorName: text }))} placeholder="업체명" style={styles.input} placeholderTextColor="#94a3b8" />
+              <TextInput value={draft.contractorContact} onChangeText={(text) => setDraft((p) => ({ ...p, contractorContact: text }))} placeholder="업체 연락처" style={styles.input} placeholderTextColor="#94a3b8" />
+              <TextInput value={draft.totalCost} onChangeText={(t) => setDraft(p => ({ ...p, totalCost: t }))} placeholder="총 비용" keyboardType="number-pad" style={[styles.input, { color: MAIN_BLUE, fontWeight: '700' }]} placeholderTextColor="#94a3b8" />
             </View>
-          </View>
+          )}
 
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="create-outline" size={20} color="#6366f1" />
-              <Text style={styles.cardTitle}>수리 후 직접 입력</Text>
-            </View>
+          <TextInput value={draft.repairSummary} multiline onChangeText={(text) => setDraft((p) => ({ ...p, repairSummary: text }))} placeholder="실제 작업 요약" style={[styles.textArea, { marginTop: 10 }]} placeholderTextColor="#94a3b8" />
+          <TextInput value={draft.notes} multiline onChangeText={(text) => setDraft((p) => ({ ...p, notes: text }))} placeholder="사용자 메모" style={[styles.textArea, { marginTop: 10 }]} placeholderTextColor="#94a3b8" />
 
-            <View style={styles.tabContainer}>
-              <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "DIY" }))} style={[styles.tab, draft.repairMethod === "DIY" && styles.tabActive]}>
-                <Text style={[styles.tabText, draft.repairMethod === "DIY" && styles.tabTextActive]}>직접 수리</Text>
-              </Pressable>
-              <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "PRO" }))} style={[styles.tab, draft.repairMethod === "PRO" && styles.tabActive]}>
-                <Text style={[styles.tabText, draft.repairMethod === "PRO" && styles.tabTextActive]}>전문업체 수리</Text>
+          <View style={[styles.imageSection, { marginTop: 14 }]}> 
+            <View style={styles.imageSectionHeader}>
+              <Text style={styles.imageSectionTitle}>수리 전 사진 · 진단 사진 자동 반영</Text>
+              <Pressable style={styles.imageAddButton} onPress={() => pickImages("beforeImageUris")}>
+                <Ionicons name="images-outline" size={16} color={MAIN_BLUE} />
+                <Text style={styles.imageAddButtonText}>추가 첨부</Text>
               </Pressable>
             </View>
-
-            <TextInput
-                value={draft.repairDate}
-                onChangeText={(text) => setDraft((prev) => ({ ...prev, repairDate: text }))}
-                placeholder="수리 완료일 (예: 2026-04-06)"
-                style={styles.input}
-                placeholderTextColor="#94a3b8"
-            />
-
-            {draft.repairMethod === "DIY" ? (
-                <View style={{ gap: 10 }}>
-                  <TextInput value={draft.diyMaterialsUsed} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialsUsed: text }))} placeholder="사용한 자재" style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput value={draft.diyMaterialCost || draft.materialCost} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialCost: text, materialCost: text }))} placeholder="자재비" style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput value={draft.diyWorkMemo} multiline onChangeText={(text) => setDraft((p) => ({ ...p, diyWorkMemo: text }))} placeholder="직접 수리 메모" style={styles.textArea} placeholderTextColor="#94a3b8" />
-                </View>
+            {diagnosisBeforeImageUris.length === 0 && draft.beforeImageUris.length === 0 ? (
+              <View style={styles.emptyImageBox}>
+                <Text style={styles.emptyImageText}>진단 사진 URL이 아직 응답되지 않았습니다. 추가 사진은 직접 첨부할 수 있습니다.</Text>
+              </View>
             ) : (
-                <View style={{ gap: 10 }}>
-                  <TextInput value={draft.contractorName} onChangeText={(text) => setDraft((p) => ({ ...p, contractorName: text }))} placeholder="업체명" style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput value={draft.contractorContact} onChangeText={(text) => setDraft((p) => ({ ...p, contractorContact: text }))} placeholder="업체 연락처" style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput value={draft.materialCost} onChangeText={(t) => setDraft(p => ({ ...p, materialCost: t }))} placeholder="재료비" style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput value={draft.laborCost} onChangeText={(t) => setDraft(p => ({ ...p, laborCost: t }))} placeholder="인건비" style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput value={draft.totalCost} onChangeText={(t) => setDraft(p => ({ ...p, totalCost: t }))} placeholder="총 비용" style={[styles.input, { color: MAIN_BLUE, fontWeight: '700' }]} placeholderTextColor="#94a3b8" />
-                </View>
-            )}
-
-            <TextInput value={draft.repairSummary} multiline onChangeText={(text) => setDraft((p) => ({ ...p, repairSummary: text }))} placeholder="실제 작업 요약" style={[styles.textArea, { marginTop: 10 }]} placeholderTextColor="#94a3b8" />
-            <TextInput value={draft.notes} multiline onChangeText={(text) => setDraft((p) => ({ ...p, notes: text }))} placeholder="추가 메모" style={[styles.textArea, { marginTop: 10 }]} placeholderTextColor="#94a3b8" />
-
-            <View style={[styles.imageSection, { marginTop: 14 }]}>
-              <View style={styles.imageSectionHeader}>
-                <Text style={styles.imageSectionTitle}>수리 전 사진 · 진단 사진 자동 반영</Text>
-                <Pressable style={styles.imageAddButton} onPress={() => pickImages("beforeImageUris")}>
-                  <Ionicons name="images-outline" size={16} color={MAIN_BLUE} />
-                  <Text style={styles.imageAddButtonText}>추가 첨부</Text>
-                </Pressable>
-              </View>
-              {diagnosisBeforeImageUris.length === 0 && draft.beforeImageUris.length === 0 ? (
-                  <View style={styles.emptyImageBox}>
-                    <Text style={styles.emptyImageText}>진단 사진 URL이 아직 응답되지 않았습니다. 추가 사진은 직접 첨부할 수 있습니다.</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
+                {diagnosisBeforeImageUris.map((uri, index) => (
+                  <View key={`diagnosis-${uri}-${index}`} style={styles.imagePreviewCard}>
+                    <Image source={{ uri }} style={styles.imagePreview} />
+                    <View style={styles.autoImageBadge}>
+                      <Text style={styles.autoImageBadgeText}>진단 사진</Text>
+                    </View>
                   </View>
-              ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
-                    {diagnosisBeforeImageUris.map((uri, index) => (
-                        <View key={`diagnosis-${uri}-${index}`} style={styles.imagePreviewCard}>
-                          <Image source={{ uri }} style={styles.imagePreview} />
-                          <View style={styles.autoImageBadge}>
-                            <Text style={styles.autoImageBadgeText}>진단 사진</Text>
-                          </View>
-                        </View>
-                    ))}
-                    {draft.beforeImageUris.map((uri, index) => (
-                        <View key={`before-extra-${uri}-${index}`} style={styles.imagePreviewCard}>
-                          <Image source={{ uri }} style={styles.imagePreview} />
-                          <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("beforeImageUris", index)}>
-                            <Ionicons name="close-circle" size={22} color="#ef4444" />
-                          </Pressable>
-                        </View>
-                    ))}
-                  </ScrollView>
-              )}
-            </View>
-
-            <View style={styles.imageSection}>
-              <View style={styles.imageSectionHeader}>
-                <Text style={styles.imageSectionTitle}>수리 후 사진</Text>
-                <Pressable style={styles.imageAddButton} onPress={() => pickImages("afterImageUris")}>
-                  <Ionicons name="images-outline" size={16} color={MAIN_BLUE} />
-                  <Text style={styles.imageAddButtonText}>이미지 첨부</Text>
-                </Pressable>
-              </View>
-              {draft.afterImageUris.length === 0 ? (
-                  <View style={styles.emptyImageBox}><Text style={styles.emptyImageText}>첨부한 사진이 없습니다.</Text></View>
-              ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
-                    {draft.afterImageUris.map((uri, index) => (
-                        <View key={`${uri}-${index}`} style={styles.imagePreviewCard}>
-                          <Image source={{ uri }} style={styles.imagePreview} />
-                          <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("afterImageUris", index)}>
-                            <Ionicons name="close-circle" size={22} color="#ef4444" />
-                          </Pressable>
-                        </View>
-                    ))}
-                  </ScrollView>
-              )}
-            </View>
-
-            <Pressable onPress={handleSaveDraft} disabled={savingDraft} style={[styles.saveButton, savingDraft && { opacity: 0.6 }]}>
-              {savingDraft ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>후입력 정보 임시 저장</Text>}
-            </Pressable>
+                ))}
+                {draft.beforeImageUris.map((uri, index) => (
+                  <View key={`before-extra-${uri}-${index}`} style={styles.imagePreviewCard}>
+                    <Image source={{ uri }} style={styles.imagePreview} />
+                    <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("beforeImageUris", index)}>
+                      <Ionicons name="close-circle" size={22} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
           </View>
 
-          <View style={styles.actionRow}>
-            <Pressable onPress={handleGenerate} disabled={generatingPdf || savingDraft} style={[styles.secondaryButton, (generatingPdf || savingDraft) && { opacity: 0.6 }]}>
-              {generatingPdf ? <ActivityIndicator size="small" color={MAIN_BLUE} /> : <Text style={styles.secondaryButtonText}>PDF 생성</Text>}
-            </Pressable>
-            <Pressable onPress={handleOpenPdf} disabled={reportBase?.status !== "READY"} style={[styles.primaryButton, reportBase?.status !== "READY" && { backgroundColor: '#cbd5e1' }]}>
-              <Ionicons name="document-text" size={18} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.primaryButtonText}>PDF 열기</Text>
-            </Pressable>
+          <View style={styles.imageSection}>
+            <View style={styles.imageSectionHeader}>
+              <Text style={styles.imageSectionTitle}>수리 후 사진</Text>
+              <Pressable style={styles.imageAddButton} onPress={() => pickImages("afterImageUris")}>
+                <Ionicons name="images-outline" size={16} color={MAIN_BLUE} />
+                <Text style={styles.imageAddButtonText}>이미지 첨부</Text>
+              </Pressable>
+            </View>
+            {draft.afterImageUris.length === 0 ? (
+              <View style={styles.emptyImageBox}><Text style={styles.emptyImageText}>첨부한 사진이 없습니다.</Text></View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
+                {draft.afterImageUris.map((uri, index) => (
+                  <View key={`${uri}-${index}`} style={styles.imagePreviewCard}>
+                    <Image source={{ uri }} style={styles.imagePreview} />
+                    <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("afterImageUris", index)}>
+                      <Ionicons name="close-circle" size={22} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          <Pressable onPress={handleSaveDraft} disabled={savingDraft} style={[styles.saveButton, savingDraft && { opacity: 0.6 }]}> 
+            {savingDraft ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>후입력 정보 임시 저장</Text>}
+          </Pressable>
+        </View>
+
+        <View style={styles.actionRow}>
+          <Pressable onPress={handleGenerate} disabled={generatingPdf || savingDraft} style={[styles.secondaryButton, (generatingPdf || savingDraft) && { opacity: 0.6 }]}>
+            {generatingPdf ? <ActivityIndicator size="small" color={MAIN_BLUE} /> : <Text style={styles.secondaryButtonText}>PDF 생성</Text>}
+          </Pressable>
+          <Pressable onPress={handleOpenPdf} disabled={reportBase?.status !== "READY"} style={[styles.primaryButton, reportBase?.status !== "READY" && { backgroundColor: '#cbd5e1' }]}> 
+            <Ionicons name="document-text" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={styles.primaryButtonText}>PDF 열기</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

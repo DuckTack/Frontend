@@ -37,19 +37,13 @@ function issueTypeLabel(t?: string) {
     case "MOLD":
       return "곰팡이";
     case "PEEL":
-      return "벗겨짐";
+      return "박리";
     case "LEAK":
       return "누수";
     case "CORROSION":
       return "부식";
     case "BULGE":
       return "들뜸";
-    case "DAMAGE":
-      return "파손";
-    case "ELECTRIC":
-      return "전기";
-    case "GAS":
-      return "가스";
     default:
       return "기타";
   }
@@ -85,13 +79,10 @@ function normalizeIssueType(value?: unknown): string {
 
   if (raw.includes("CRACK") || raw.includes("균열")) return "CRACK";
   if (raw.includes("MOLD") || raw.includes("곰팡이")) return "MOLD";
-  if (raw.includes("PEEL") || raw.includes("벗겨짐") || raw.includes("박리")) return "PEEL";
+  if (raw.includes("PEEL") || raw.includes("박리") || raw.includes("박리")) return "PEEL";
   if (raw.includes("LEAK") || raw.includes("누수")) return "LEAK";
   if (raw.includes("CORROSION") || raw.includes("부식") || raw.includes("녹")) return "CORROSION";
   if (raw.includes("BULGE") || raw.includes("들뜸")) return "BULGE";
-  if (raw.includes("DAMAGE") || raw.includes("파손")) return "DAMAGE";
-  if (raw.includes("ELECTRIC") || raw.includes("전기")) return "ELECTRIC";
-  if (raw.includes("GAS") || raw.includes("가스")) return "GAS";
 
   return "ETC";
 }
