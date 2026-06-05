@@ -15,7 +15,7 @@ import { Ionicons, Feather } from "@expo/vector-icons";
 
 import ScreenState from "../src/components/ScreenState";
 import { clearAccessToken } from "../src/store/tokenStorage";
-import { openReportPdf, listMyReports, MyReportItem } from "../src/api/reports";
+import { deleteReport, openReportPdf, listMyReports, MyReportItem } from "../src/api/reports";
 import { getMe, updateMe, Me, ResidenceType, RentType } from "../src/api/users";
 
 const MAIN_BLUE = "#3b82f6";
@@ -216,6 +216,41 @@ export default function MyPage() {
     } catch {
       Alert.alert("다운로드 실패");
     }
+  }
+
+  async function handleDelete(report: MyReportItem) {
+    const diagnosisId = (report as any).diagnosisId;
+
+    if (diagnosisId === null || diagnosisId === undefined || diagnosisId === "") {
+      Alert.alert("삭제 불가", "삭제에 필요한 진단 ID가 없습니다.");
+      return;
+    }
+
+    Alert.alert(
+        "리포트 삭제",
+        "이 리포트 후입력 정보와 생성된 PDF 정보를 삭제합니다. 진단 이력 자체는 삭제되지 않습니다.",
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "삭제",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteReport(diagnosisId);
+                setReports((prev) =>
+                    prev.filter(
+                        (item) => String((item as any).diagnosisId) !== String(diagnosisId)
+                    )
+                );
+                Alert.alert("삭제 완료");
+              } catch (e) {
+                console.log("리포트 삭제 실패:", e);
+                Alert.alert("삭제 실패", "잠시 후 다시 시도해주세요.");
+              }
+            },
+          },
+        ]
+    );
   }
 
   async function handleSaveProfile() {
@@ -430,11 +465,16 @@ export default function MyPage() {
                               다운로드
                             </Text>
                           </Pressable>
+
+                          <Pressable
+                              onPress={() => handleDelete(r)}
+                              style={styles.deleteBtn}
+                          >
+                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                            <Text style={styles.deleteBtnText}>삭제</Text>
+                          </Pressable>
                         </View>
 
-                        <Pressable onPress={() => handleGenerate(r)} style={styles.detailBtn}>
-                          <Text style={styles.detailBtnText}>상세 보기</Text>
-                        </Pressable>
                       </View>
                   );
                 })
@@ -620,7 +660,7 @@ const styles = StyleSheet.create({
   infoText: { fontSize: 13, color: "#64748b" },
   statusText: { fontSize: 13, fontWeight: "800", color: "#cbd5e1" },
 
-  reportActions: { flexDirection: "row", gap: 10, marginBottom: 10 },
+  reportActions: { flexDirection: "row", gap: 8, marginBottom: 10 },
   genBtn: {
     flex: 1,
     backgroundColor: "#1e293b",
@@ -640,6 +680,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   downBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+
+  deleteBtn: {
+    width: 72,
+    backgroundColor: "#fff1f2",
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+  },
+  deleteBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 13 },
 
   detailBtn: {
     height: 48,
@@ -694,6 +748,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     gap: 8,
   },
+
   logoutText: { color: "#ef4444", fontWeight: "700", fontSize: 14 },
   footerInfo: {
     textAlign: "center",

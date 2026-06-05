@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, FontAwesome } from "@expo/vector-icons";
 
 import {
@@ -323,7 +324,7 @@ export default function ExpertReviews() {
   const canManageMyReview = !isReadOnly && Boolean(myReviewForHistory);
 
   return (
-      <View style={styles.container}>
+      <SafeAreaView edges={["top"]} style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
 
         <View style={styles.header}>
@@ -427,93 +428,93 @@ export default function ExpertReviews() {
           )}
 
           {loading ? (
-            <View style={styles.emptyBox}>
-          <ActivityIndicator color={MAIN_BLUE} />
-      </View>
-  ) : reviews.length === 0 ? (
-      <View style={styles.emptyBox}>
-        <Feather name="message-circle" size={40} color="#cbd5e1" />
-        <Text style={styles.emptyText}>
-          {isReadOnly
-              ? "아직 등록된 리뷰가 없어요"
-              : "아직 리뷰가 없어요\n첫 리뷰를 남겨보세요!"}
-        </Text>
-      </View>
-  ) : (
-      reviews.map((r) => {
-        const isMyReview = isSameUsername(r.authorUsername, me?.username);
-        const deleting = deletingReviewId === r.id;
-
-        return (
-            <View key={r.id} style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarText}>
-                    {r.authorUsername?.charAt(0)?.toUpperCase() ?? "?"}
-                  </Text>
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <View style={styles.usernameRow}>
-                    <Text style={styles.reviewUsername} numberOfLines={1}>
-                      {r.authorUsername}
-                    </Text>
-
-                    {isMyReview ? (
-                        <View style={styles.myReviewBadge}>
-                          <Text style={styles.myReviewBadgeText}>내 리뷰</Text>
-                        </View>
-                    ) : null}
-                  </View>
-
-                  <StarRow rating={r.rating} size={13} />
-                </View>
-
-                <Text style={styles.reviewDate}>
-                  {formatReviewDate((r as any).createdAt)}
+              <View style={styles.emptyBox}>
+                <ActivityIndicator color={MAIN_BLUE} />
+              </View>
+          ) : reviews.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Feather name="message-circle" size={40} color="#cbd5e1" />
+                <Text style={styles.emptyText}>
+                  {isReadOnly
+                      ? "아직 등록된 리뷰가 없어요"
+                      : "아직 리뷰가 없어요\n첫 리뷰를 남겨보세요!"}
                 </Text>
               </View>
+          ) : (
+              reviews.map((r) => {
+                const isMyReview = isSameUsername(r.authorUsername, me?.username);
+                const deleting = deletingReviewId === r.id;
 
-              {r.content ? (
-                  <Text style={styles.reviewContent}>{r.content}</Text>
-              ) : null}
+                return (
+                    <View key={r.id} style={styles.reviewCard}>
+                      <View style={styles.reviewHeader}>
+                        <View style={styles.avatarCircle}>
+                          <Text style={styles.avatarText}>
+                            {r.authorUsername?.charAt(0)?.toUpperCase() ?? "?"}
+                          </Text>
+                        </View>
 
-              {isMyReview && !isReadOnly ? (
-                  <View style={styles.myReviewActionRow}>
-                    <Pressable
-                        onPress={() => startEditReview(r)}
-                        disabled={deleting || submitting}
-                        style={styles.editReviewButton}
-                    >
-                      <Feather name="edit-3" size={14} color={MAIN_BLUE} />
-                      <Text style={styles.editReviewText}>수정</Text>
-                    </Pressable>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.usernameRow}>
+                            <Text style={styles.reviewUsername} numberOfLines={1}>
+                              {r.authorUsername}
+                            </Text>
 
-                    <Pressable
-                        onPress={() => handleDeleteReview(r.id)}
-                        disabled={deleting}
-                        style={[styles.deleteReviewButton, deleting && { opacity: 0.6 }]}
-                    >
-                      {deleting ? (
-                          <ActivityIndicator size="small" color="#dc2626" />
-                      ) : (
-                          <>
-                            <Feather name="trash-2" size={14} color="#dc2626" />
-                            <Text style={styles.deleteReviewText}>삭제</Text>
-                          </>
-                      )}
-                    </Pressable>
-                  </View>
-              ) : null}
-            </View>
-        );
-      })
-  )}
+                            {isMyReview ? (
+                                <View style={styles.myReviewBadge}>
+                                  <Text style={styles.myReviewBadgeText}>내 리뷰</Text>
+                                </View>
+                            ) : null}
+                          </View>
 
-  <View style={{ height: 40 }} />
-</ScrollView>
-</View>
-);
+                          <StarRow rating={r.rating} size={13} />
+                        </View>
+
+                        <Text style={styles.reviewDate}>
+                          {formatReviewDate((r as any).createdAt)}
+                        </Text>
+                      </View>
+
+                      {r.content ? (
+                          <Text style={styles.reviewContent}>{r.content}</Text>
+                      ) : null}
+
+                      {isMyReview && !isReadOnly ? (
+                          <View style={styles.myReviewActionRow}>
+                            <Pressable
+                                onPress={() => startEditReview(r)}
+                                disabled={deleting || submitting}
+                                style={styles.editReviewButton}
+                            >
+                              <Feather name="edit-3" size={14} color={MAIN_BLUE} />
+                              <Text style={styles.editReviewText}>수정</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={() => handleDeleteReview(r.id)}
+                                disabled={deleting}
+                                style={[styles.deleteReviewButton, deleting && { opacity: 0.6 }]}
+                            >
+                              {deleting ? (
+                                  <ActivityIndicator size="small" color="#dc2626" />
+                              ) : (
+                                  <>
+                                    <Feather name="trash-2" size={14} color="#dc2626" />
+                                    <Text style={styles.deleteReviewText}>삭제</Text>
+                                  </>
+                              )}
+                            </Pressable>
+                          </View>
+                      ) : null}
+                    </View>
+                );
+              })
+          )}
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -524,8 +525,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
-    paddingBottom: 16,
+    paddingTop: 0,
+    paddingBottom: 14,
     backgroundColor: "#fff",
   },
 
@@ -548,7 +549,7 @@ const styles = StyleSheet.create({
     borderColor: "#f1f5f9",
   },
 
-  scroll: { padding: 20, gap: 16 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, gap: 16 },
 
   summaryCard: {
     backgroundColor: "#fff",

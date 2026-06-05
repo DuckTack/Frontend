@@ -444,7 +444,7 @@ export default function Signup() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ flex: 1 }}
       >
-        <View style={styles.container}>
+        <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
           <Stack.Screen options={{ headerShown: false }} />
 
           <View style={styles.header}>
@@ -873,7 +873,7 @@ export default function Signup() {
               </Pressable>
             </View>
           </ScrollView>
-        </View>
+        </SafeAreaView>
       </KeyboardAvoidingView>
   );
 }
@@ -883,7 +883,7 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 0,
     paddingBottom: 24,
     backgroundColor: "#f8faff",
   },

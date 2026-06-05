@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { View, Text, Pressable, ScrollView, Alert, StyleSheet, Platform, SafeAreaView, TouchableOpacity } from "react-native";
+import { View, Text, Pressable, ScrollView, Alert, StyleSheet, Platform, TouchableOpacity } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -8,12 +9,12 @@ const BG_BLUE = "#eff6ff";
 
 // [디자인 컴포넌트] - 순수 React Native 컴포넌트만 사용
 function CheckboxRow({
-  label,
-  checked,
-  onPress,
-  description,
-  required = false,
-}: {
+                       label,
+                       checked,
+                       onPress,
+                       description,
+                       required = false,
+                     }: {
   label: string;
   checked: boolean;
   onPress: () => void;
@@ -21,23 +22,23 @@ function CheckboxRow({
   required?: boolean;
 }) {
   return (
-    <Pressable 
-      onPress={onPress} 
-      style={[styles.checkboxCard, checked && styles.checkboxCardActive]}
-    >
-      <View style={styles.checkboxTopRow}>
-        <View style={[styles.customCheckbox, checked && styles.customCheckboxChecked]}>
-          {checked && <Ionicons name="checkmark" size={16} color="white" />}
-        </View>
-        <Text style={styles.checkboxLabel}>
-          <Text style={{ color: required ? MAIN_BLUE : "#64748b", fontWeight: "800" }}>
-            {required ? "[필수] " : "[선택] "}
+      <Pressable
+          onPress={onPress}
+          style={[styles.checkboxCard, checked && styles.checkboxCardActive]}
+      >
+        <View style={styles.checkboxTopRow}>
+          <View style={[styles.customCheckbox, checked && styles.customCheckboxChecked]}>
+            {checked && <Ionicons name="checkmark" size={16} color="white" />}
+          </View>
+          <Text style={styles.checkboxLabel}>
+            <Text style={{ color: required ? MAIN_BLUE : "#64748b", fontWeight: "800" }}>
+              {required ? "[필수] " : "[선택] "}
+            </Text>
+            {label}
           </Text>
-          {label}
-        </Text>
-      </View>
-      <Text style={styles.checkboxDescription}>{description}</Text>
-    </Pressable>
+        </View>
+        <Text style={styles.checkboxDescription}>{description}</Text>
+      </Pressable>
   );
 }
 
@@ -67,89 +68,89 @@ export default function SignupConsentPage() {
   // --- [원본 로직 끝] ---
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>약관 동의</Text>
-          <Text style={styles.headerSub}>안전한 서비스 이용을 위해{"\n"}약관에 동의해주세요</Text>
-        </View>
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
 
-        {/* 전체 동의 버튼 */}
-        <TouchableOpacity 
-          activeOpacity={0.7}
-          onPress={handleAllAgree} 
-          style={[styles.allAgreeButton, isAllAgree && styles.allAgreeButtonActive]}
+        <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
         >
-          <Ionicons 
-            name={isAllAgree ? "checkmark-circle" : "ellipse-outline"} 
-            size={24} 
-            color={isAllAgree ? "white" : "#cbd5e1"} 
-          />
-          <Text style={[styles.allAgreeText, isAllAgree && styles.allAgreeTextActive]}>
-            모든 약관에 전체 동의합니다
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>약관 동의</Text>
+            <Text style={styles.headerSub}>안전한 서비스 이용을 위해{"\n"}약관에 동의해주세요</Text>
+          </View>
 
-        <View style={styles.divider} />
-
-        {/* 개별 약관 리스트 */}
-        <View style={styles.checkboxList}>
-          <CheckboxRow
-            required
-            checked={serviceChecked}
-            onPress={() => setServiceChecked(!serviceChecked)}
-            label="서비스 이용약관"
-            description="로그인, 진단 기록 조회, DIY/전문가 안내, 리포트 기능 제공을 위한 기본 약관 동의입니다."
-          />
-
-          <CheckboxRow
-            required
-            checked={privacyChecked}
-            onPress={() => setPrivacyChecked(!privacyChecked)}
-            label="개인정보 수집 및 이용"
-            description="회원가입 시 입력한 계정 정보와 거주 정보를 서비스 제공 목적으로 수집합니다."
-          />
-
-          <CheckboxRow
-            checked={marketingChecked}
-            onPress={() => setMarketingChecked(!marketingChecked)}
-            label="마케팅 정보 수신"
-            description="이벤트, 제휴 혜택, 업데이트 안내 수신에 대한 선택적 동의입니다."
-          />
-        </View>
-
-        {/* 하단 버튼 */}
-        <View style={styles.footer}>
+          {/* 전체 동의 버튼 */}
           <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={handleContinue}
-            style={[styles.mainButton, !allRequiredChecked && styles.mainButtonDisabled]}
+              activeOpacity={0.7}
+              onPress={handleAllAgree}
+              style={[styles.allAgreeButton, isAllAgree && styles.allAgreeButtonActive]}
           >
-            <Text style={styles.mainButtonText}>회원가입 계속하기</Text>
+            <Ionicons
+                name={isAllAgree ? "checkmark-circle" : "ellipse-outline"}
+                size={24}
+                color={isAllAgree ? "white" : "#cbd5e1"}
+            />
+            <Text style={[styles.allAgreeText, isAllAgree && styles.allAgreeTextActive]}>
+              모든 약관에 전체 동의합니다
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            onPress={() => router.replace("/login")} 
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonText}>로그인으로 돌아가기</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+          <View style={styles.divider} />
+
+          {/* 개별 약관 리스트 */}
+          <View style={styles.checkboxList}>
+            <CheckboxRow
+                required
+                checked={serviceChecked}
+                onPress={() => setServiceChecked(!serviceChecked)}
+                label="서비스 이용약관"
+                description="로그인, 진단 기록 조회, DIY/전문가 안내, 리포트 기능 제공을 위한 기본 약관 동의입니다."
+            />
+
+            <CheckboxRow
+                required
+                checked={privacyChecked}
+                onPress={() => setPrivacyChecked(!privacyChecked)}
+                label="개인정보 수집 및 이용"
+                description="회원가입 시 입력한 계정 정보와 거주 정보를 서비스 제공 목적으로 수집합니다."
+            />
+
+            <CheckboxRow
+                checked={marketingChecked}
+                onPress={() => setMarketingChecked(!marketingChecked)}
+                label="마케팅 정보 수신"
+                description="이벤트, 제휴 혜택, 업데이트 안내 수신에 대한 선택적 동의입니다."
+            />
+          </View>
+
+          {/* 하단 버튼 */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleContinue}
+                style={[styles.mainButton, !allRequiredChecked && styles.mainButtonDisabled]}
+            >
+              <Text style={styles.mainButtonText}>회원가입 계속하기</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                onPress={() => router.replace("/login")}
+                style={styles.backButton}
+            >
+              <Text style={styles.backButtonText}>로그인으로 돌아가기</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  scrollContent: { paddingHorizontal: 24, paddingTop: Platform.OS === 'android' ? 20 : 10, paddingBottom: 40 },
-  
-  header: { marginTop: 20, marginBottom: 30 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
+
+  header: { marginTop: 0, marginBottom: 24 },
   headerTitle: { fontSize: 28, fontWeight: "900", color: "#111827" },
   headerSub: { fontSize: 15, color: "#6b7280", marginTop: 8, lineHeight: 22 },
 

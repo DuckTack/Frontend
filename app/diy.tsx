@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import ScreenState from "../src/components/ScreenState";
@@ -419,7 +420,7 @@ export default function Diy() {
   const materials = guide.materials ?? [];
 
   return (
-      <View style={styles.container}>
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
 
         <View style={styles.header}>
@@ -581,7 +582,7 @@ export default function Diy() {
 
           <View style={{ height: 40 }} />
         </ScrollView>
-      </View>
+      </SafeAreaView>
   );
 }
 
@@ -593,7 +594,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 0,
     paddingBottom: 16,
     backgroundColor: "#fff",
   },
@@ -980,7 +981,7 @@ const styles = StyleSheet.create({
     color: MAIN_BLUE,
   },
 
-  
+
 
   productActionBox: {
     flexDirection: "row",

@@ -11,6 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -343,237 +344,239 @@ export default function ExpertBooking() {
   }
 
   return (
-      <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Stack.Screen options={{ headerShown: false }} />
 
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Feather name="arrow-left" size={20} color={MAIN_BLUE} />
-          </Pressable>
-          <Text style={styles.headerTitle}>예약 신청하기</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.vendorCard}>
-            <Text style={styles.vendorLabel}>선택한 업체</Text>
-            <Text style={styles.vendorName}>{vendorName ?? kakaoPlaceName ?? "업체 정보 없음"}</Text>
-
-            <View style={styles.vendorInfoRow}>
-              <MaterialCommunityIcons name="tag-outline" size={14} color="#94a3b8" />
-              <Text style={styles.vendorInfoText}>
-                예상 시작가: {vendorMinPrice ? `${Number(vendorMinPrice).toLocaleString()}원~` : "-"}
-              </Text>
-            </View>
-
-            <View style={styles.vendorInfoRow}>
-              <Feather name="phone" size={14} color="#94a3b8" />
-              <Text style={styles.vendorInfoText}>{vendorPhone ?? kakaoPlacePhone ?? "-"}</Text>
-            </View>
-
-            {kakaoPlaceId && !companyId ? (
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningText}>
-                    외부 검색 업체는 앱 내 예약이 불가능합니다. 제휴업체만 예약할 수 있습니다.
-                  </Text>
-                </View>
-            ) : null}
-
-            {vendorIntro && (
-                <Text style={styles.vendorIntro} numberOfLines={1}>
-                  {vendorIntro}
-                </Text>
-            )}
+          <View style={styles.header}>
+            <Pressable onPress={() => router.back()} style={styles.backBtn}>
+              <Feather name="arrow-left" size={20} color={MAIN_BLUE} />
+            </Pressable>
+            <Text style={styles.headerTitle}>예약 신청하기</Text>
+            <View style={{ width: 40 }} />
           </View>
 
-          <Text style={styles.sectionTitle}>신청자 정보</Text>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.vendorCard}>
+              <Text style={styles.vendorLabel}>선택한 업체</Text>
+              <Text style={styles.vendorName}>{vendorName ?? kakaoPlaceName ?? "업체 정보 없음"}</Text>
 
-          <View style={styles.formSection}>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>방문자 성함</Text>
-              <TextInput
-                  value={customerName}
-                  onChangeText={setCustomerName}
-                  placeholder="성함을 입력하세요"
-                  style={styles.input}
-              />
+              <View style={styles.vendorInfoRow}>
+                <MaterialCommunityIcons name="tag-outline" size={14} color="#94a3b8" />
+                <Text style={styles.vendorInfoText}>
+                  예상 시작가: {vendorMinPrice ? `${Number(vendorMinPrice).toLocaleString()}원~` : "-"}
+                </Text>
+              </View>
+
+              <View style={styles.vendorInfoRow}>
+                <Feather name="phone" size={14} color="#94a3b8" />
+                <Text style={styles.vendorInfoText}>{vendorPhone ?? kakaoPlacePhone ?? "-"}</Text>
+              </View>
+
+              {kakaoPlaceId && !companyId ? (
+                  <View style={styles.warningBox}>
+                    <Text style={styles.warningText}>
+                      외부 검색 업체는 앱 내 예약이 불가능합니다. 제휴업체만 예약할 수 있습니다.
+                    </Text>
+                  </View>
+              ) : null}
+
+              {vendorIntro && (
+                  <Text style={styles.vendorIntro} numberOfLines={1}>
+                    {vendorIntro}
+                  </Text>
+              )}
             </View>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>연락처</Text>
-              <TextInput
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  placeholder="010-0000-0000"
-                  keyboardType="phone-pad"
-                  style={styles.input}
-              />
-            </View>
+            <Text style={styles.sectionTitle}>신청자 정보</Text>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>방문 주소</Text>
-              <TextInput
-                  value={address}
-                  onChangeText={setAddress}
-                  placeholder="상세 주소를 입력하세요"
-                  style={styles.input}
-              />
-            </View>
+            <View style={styles.formSection}>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>방문자 성함</Text>
+                <TextInput
+                    value={customerName}
+                    onChangeText={setCustomerName}
+                    placeholder="성함을 입력하세요"
+                    style={styles.input}
+                />
+              </View>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>방문 희망일</Text>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>연락처</Text>
+                <TextInput
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    placeholder="010-0000-0000"
+                    keyboardType="phone-pad"
+                    style={styles.input}
+                />
+              </View>
 
-              <Pressable
-                  onPress={() => setShowDatePicker((prev) => !prev)}
-                  style={[
-                    styles.dateField,
-                    isSelectedDateUnavailable && styles.blockedInput,
-                  ]}
-              >
-                <Text
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>방문 주소</Text>
+                <TextInput
+                    value={address}
+                    onChangeText={setAddress}
+                    placeholder="상세 주소를 입력하세요"
+                    style={styles.input}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>방문 희망일</Text>
+
+                <Pressable
+                    onPress={() => setShowDatePicker((prev) => !prev)}
                     style={[
-                      styles.dateFieldText,
-                      !visitDate && styles.dateFieldPlaceholder,
+                      styles.dateField,
+                      isSelectedDateUnavailable && styles.blockedInput,
                     ]}
                 >
-                  {visitDate || "날짜를 선택하세요"}
-                </Text>
-                <Feather name="calendar" size={22} color={MAIN_BLUE} />
-              </Pressable>
-
-              {showDatePicker ? (
-                  <View style={styles.datePickerBox}>
-                    <DateTimePicker
-                        value={parseDateOrToday(visitDate)}
-                        mode="date"
-                        display={Platform.OS === "ios" ? "spinner" : "calendar"}
-                        minimumDate={new Date()}
-                        onChange={handleDateChange}
-                        themeVariant="light"
-                        accentColor={MAIN_BLUE}
-                        locale="ko-KR"
-                        style={styles.datePicker}
-                    />
-
-                    {Platform.OS === "ios" ? (
-                        <Pressable
-                            onPress={() => setShowDatePicker(false)}
-                            style={styles.datePickerDoneButton}
-                        >
-                          <Text style={styles.datePickerDoneText}>날짜 선택 완료</Text>
-                        </Pressable>
-                    ) : null}
-                  </View>
-              ) : null}
-
-              {isSelectedDateUnavailable ? (
-                  <Text style={styles.blockedHint}>
-                    이 날짜는 업체가 전체 휴무 처리한 날짜입니다.
+                  <Text
+                      style={[
+                        styles.dateFieldText,
+                        !visitDate && styles.dateFieldPlaceholder,
+                      ]}
+                  >
+                    {visitDate || "날짜를 선택하세요"}
                   </Text>
-              ) : null}
-            </View>
+                  <Feather name="calendar" size={22} color={MAIN_BLUE} />
+                </Pressable>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>방문 희망 시간</Text>
+                {showDatePicker ? (
+                    <View style={styles.datePickerBox}>
+                      <DateTimePicker
+                          value={parseDateOrToday(visitDate)}
+                          mode="date"
+                          display={Platform.OS === "ios" ? "spinner" : "calendar"}
+                          minimumDate={new Date()}
+                          onChange={handleDateChange}
+                          themeVariant="light"
+                          accentColor={MAIN_BLUE}
+                          locale="ko-KR"
+                          style={styles.datePicker}
+                      />
 
-              {!isValidDate(visitDate) ? (
-                  <Text style={styles.helperText}>
-                    방문 희망일을 먼저 캘린더에서 선택하세요.
-                  </Text>
-              ) : availabilityLoading ? (
-                  <Text style={styles.helperText}>차단 시간을 불러오는 중...</Text>
-              ) : (
-                  <View style={styles.timeGrid}>
-                    {RESERVATION_TIMES.map((time) => {
-                      const blocked =
-                          isSelectedDateUnavailable || unavailableTimeSet.has(time);
-                      const selected = visitTime === time;
-
-                      return (
+                      {Platform.OS === "ios" ? (
                           <Pressable
-                              key={time}
-                              disabled={blocked}
-                              onPress={() => setVisitTime(time)}
-                              style={[
-                                styles.timeButton,
-                                selected && styles.timeButtonSelected,
-                                blocked && styles.timeButtonBlocked,
-                              ]}
+                              onPress={() => setShowDatePicker(false)}
+                              style={styles.datePickerDoneButton}
                           >
-                            <Text
+                            <Text style={styles.datePickerDoneText}>날짜 선택 완료</Text>
+                          </Pressable>
+                      ) : null}
+                    </View>
+                ) : null}
+
+                {isSelectedDateUnavailable ? (
+                    <Text style={styles.blockedHint}>
+                      이 날짜는 업체가 전체 휴무 처리한 날짜입니다.
+                    </Text>
+                ) : null}
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>방문 희망 시간</Text>
+
+                {!isValidDate(visitDate) ? (
+                    <Text style={styles.helperText}>
+                      방문 희망일을 먼저 캘린더에서 선택하세요.
+                    </Text>
+                ) : availabilityLoading ? (
+                    <Text style={styles.helperText}>차단 시간을 불러오는 중...</Text>
+                ) : (
+                    <View style={styles.timeGrid}>
+                      {RESERVATION_TIMES.map((time) => {
+                        const blocked =
+                            isSelectedDateUnavailable || unavailableTimeSet.has(time);
+                        const selected = visitTime === time;
+
+                        return (
+                            <Pressable
+                                key={time}
+                                disabled={blocked}
+                                onPress={() => setVisitTime(time)}
                                 style={[
-                                  styles.timeButtonText,
-                                  selected && styles.timeButtonTextSelected,
-                                  blocked && styles.timeButtonTextBlocked,
+                                  styles.timeButton,
+                                  selected && styles.timeButtonSelected,
+                                  blocked && styles.timeButtonBlocked,
                                 ]}
                             >
-                              {time}
-                            </Text>
-                            {blocked ? (
-                                <Text style={styles.timeBlockedLabel}>예약불가</Text>
-                            ) : null}
-                          </Pressable>
-                      );
-                    })}
-                  </View>
-              )}
+                              <Text
+                                  style={[
+                                    styles.timeButtonText,
+                                    selected && styles.timeButtonTextSelected,
+                                    blocked && styles.timeButtonTextBlocked,
+                                  ]}
+                              >
+                                {time}
+                              </Text>
+                              {blocked ? (
+                                  <Text style={styles.timeBlockedLabel}>예약불가</Text>
+                              ) : null}
+                            </Pressable>
+                        );
+                      })}
+                    </View>
+                )}
 
-              {isValidDate(visitDate) && unavailableTimes.length > 0 ? (
-                  <Text style={styles.helperText}>
-                    업체가 차단한 시간은 예약할 수 없습니다.
-                  </Text>
-              ) : null}
+                {isValidDate(visitDate) && unavailableTimes.length > 0 ? (
+                    <Text style={styles.helperText}>
+                      업체가 차단한 시간은 예약할 수 없습니다.
+                    </Text>
+                ) : null}
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>진단 내용 요약</Text>
+                <TextInput
+                    value={issueSummary}
+                    onChangeText={setIssueSummary}
+                    placeholder="진단 결과가 없습니다"
+                    style={[styles.input, styles.readOnlyInput]}
+                    editable={false}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>상세 요청사항</Text>
+                <TextInput
+                    value={requestNote}
+                    onChangeText={setRequestNote}
+                    placeholder="업체에 전달할 추가 내용을 적어주세요."
+                    multiline
+                    textAlignVertical="top"
+                    style={[styles.input, styles.textArea]}
+                />
+              </View>
             </View>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>진단 내용 요약</Text>
-              <TextInput
-                  value={issueSummary}
-                  onChangeText={setIssueSummary}
-                  placeholder="진단 결과가 없습니다"
-                  style={[styles.input, styles.readOnlyInput]}
-                  editable={false}
-              />
+            <View style={styles.buttonContainer}>
+              <Pressable
+                  onPress={handleReserve}
+                  disabled={submitting || isSelectedDateUnavailable}
+                  style={[
+                    styles.submitBtn,
+                    (submitting || isSelectedDateUnavailable) && { opacity: 0.6 },
+                  ]}
+              >
+                <Text style={styles.submitBtnText}>
+                  {submitting ? "예약 요청 중..." : "예약 신청 완료"}
+                </Text>
+              </Pressable>
+
+              <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
+                <Text style={styles.cancelBtnText}>취소하기</Text>
+              </Pressable>
             </View>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>상세 요청사항</Text>
-              <TextInput
-                  value={requestNote}
-                  onChangeText={setRequestNote}
-                  placeholder="업체에 전달할 추가 내용을 적어주세요."
-                  multiline
-                  textAlignVertical="top"
-                  style={[styles.input, styles.textArea]}
-              />
-            </View>
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Pressable
-                onPress={handleReserve}
-                disabled={submitting || isSelectedDateUnavailable}
-                style={[
-                  styles.submitBtn,
-                  (submitting || isSelectedDateUnavailable) && { opacity: 0.6 },
-                ]}
-            >
-              <Text style={styles.submitBtnText}>
-                {submitting ? "예약 요청 중..." : "예약 신청 완료"}
-              </Text>
-            </Pressable>
-
-            <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
-              <Text style={styles.cancelBtnText}>취소하기</Text>
-            </Pressable>
-          </View>
-
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
   );
 }
 
@@ -584,7 +587,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 0,
     paddingBottom: 16,
     backgroundColor: "#fff",
   },
