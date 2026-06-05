@@ -35,12 +35,17 @@ function cleanName(value: unknown): string | undefined {
   const text = String(value).trim();
 
   if (!text) return undefined;
-  if (text === "undefined") return undefined;
-  if (text === "null") return undefined;
+  if (text.toLowerCase() === "undefined") return undefined;
+  if (text.toLowerCase() === "null") return undefined;
   if (text === "전문업체") return undefined;
   if (text.startsWith("업체 #")) return undefined;
 
   return text;
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return "";
+  return String(value).slice(0, 10);
 }
 
 export default function Histories() {
@@ -66,25 +71,81 @@ export default function Histories() {
     return String(raw);
   }
 
-  function getReviewVendorName(item: HistorySummary): string | undefined {
-    const anyItem: any = item;
-
-    return (
-        cleanName(anyItem.expertVendorName) ||
-        cleanName(anyItem.companyName) ||
-        cleanName(anyItem.vendorName) ||
-        cleanName(anyItem.kakaoPlaceName)
-    );
-  }
-
   function isReportReady(item: HistorySummary): boolean {
     const historyId = getHistoryId(item);
     return reportStatus[historyId] === "READY";
   }
 
+  function getReservationStatus(item: HistorySummary): string {
+    return String((item as any).reservationStatus || "").toUpperCase();
+  }
+
+  function hasReservation(item: HistorySummary): boolean {
+    const anyItem: any = item;
+
+    return Boolean(
+        anyItem.reservationId ||
+        anyItem.companyId ||
+        anyItem.expertVendorId ||
+        anyItem.kakaoPlaceId ||
+        cleanName(anyItem.expertVendorName) ||
+        cleanName(anyItem.companyName) ||
+        cleanName(anyItem.kakaoPlaceName)
+    );
+  }
+
+  function hasVendorForReview(item: HistorySummary): boolean {
+    return Boolean(getReviewCompanyId(item) || getReviewKakaoPlaceId(item));
+  }
+
   function canWriteReview(item: HistorySummary): boolean {
-    const hasCompany = Boolean(getReviewCompanyId(item) || getReviewKakaoPlaceId(item));
-    return hasCompany && isReportReady(item);
+    return hasVendorForReview(item) && getReservationStatus(item) === "DONE";
+  }
+
+  function getHistoryStatusText(item: HistorySummary): string {
+    const id = getHistoryId(item);
+    const reportState = reportStatus[id];
+    const reservationStatus = getReservationStatus(item);
+    const analysisStatus = String((item as any).status || "").toUpperCase();
+
+    if (reportState === "READY") return "리포트 완료";
+
+    if (reservationStatus === "DONE") return "수리 완료";
+    if (reservationStatus === "ACCEPTED") return "업체 수락 완료";
+    if (reservationStatus === "PENDING") return "업체 예약 완료";
+    if (reservationStatus === "REJECTED") return "예약 거절";
+    if (reservationStatus === "CANCELLED") return "예약 취소";
+    if (reservationStatus === "NOSHOW") return "노쇼";
+
+    if (hasReservation(item)) return "업체 예약 완료";
+
+    if (analysisStatus === "FAILED") return "분석 실패";
+    if (analysisStatus === "ANALYZING") return "분석 중";
+
+    return "분석 완료";
+  }
+
+  function getHistoryStatusColor(item: HistorySummary): string {
+    const text = getHistoryStatusText(item);
+
+    switch (text) {
+      case "리포트 완료":
+      case "수리 완료":
+        return "#10b981";
+      case "업체 수락 완료":
+      case "업체 예약 완료":
+        return MAIN_BLUE;
+      case "예약 거절":
+      case "분석 실패":
+        return "#ef4444";
+      case "분석 중":
+        return "#f97316";
+      case "예약 취소":
+      case "노쇼":
+      case "분석 완료":
+      default:
+        return "#64748b";
+    }
   }
 
   async function fetchList() {
@@ -138,23 +199,17 @@ export default function Histories() {
     const historyId = getHistoryId(item);
     const companyId = getReviewCompanyId(item);
     const kakaoPlaceId = getReviewKakaoPlaceId(item);
-    const vendorDisplayName = getReviewVendorName(item);
 
-    if (!isReportReady(item)) {
-      Alert.alert("리뷰 작성 불가", "리포트 완료 후 리뷰 작성이 가능합니다.");
-      return;
-    }
+    const reviewAlreadyWritten = Boolean((item as any).reviewWritten);
 
     if (!companyId && !kakaoPlaceId) {
       Alert.alert("리뷰 작성 불가", "연결된 업체가 있는 기록에서만 리뷰를 작성할 수 있습니다.");
       return;
     }
 
-    if (!vendorDisplayName) {
-      Alert.alert(
-          "업체명 확인 필요",
-          "연결된 업체 ID는 있지만 업체명이 내려오지 않았습니다. 백엔드 HistoryService에서 expertVendorName을 확인해주세요."
-      );
+    if (!reviewAlreadyWritten && !canWriteReview(item)) {
+      Alert.alert("리뷰 작성 불가", "업체가 수리 완료 처리한 뒤 리뷰를 작성할 수 있습니다.");
+      return;
     }
 
     const reviewVendorId = companyId ?? kakaoPlaceId ?? historyId;
@@ -164,40 +219,33 @@ export default function Histories() {
       params: {
         vendorId: reviewVendorId,
         historyId,
-
         companyId,
-        companyName: vendorDisplayName,
-        vendorName: vendorDisplayName,
-
         kakaoPlaceId,
-        kakaoPlaceName: vendorDisplayName,
-        kakaoPlacePhone: (item as any).kakaoPlacePhone,
-        kakaoPlaceAddress: (item as any).kakaoPlaceAddress,
-        kakaoPlaceLat:
-            (item as any).kakaoPlaceLat != null
-                ? String((item as any).kakaoPlaceLat)
-                : undefined,
-        kakaoPlaceLng:
-            (item as any).kakaoPlaceLng != null
-                ? String((item as any).kakaoPlaceLng)
-                : undefined,
-
+        vendorName: item.expertVendorName ?? item.kakaoPlaceName ?? "전문업체",
+        kakaoPlaceName: item.kakaoPlaceName ?? item.expertVendorName,
+        kakaoPlacePhone: item.kakaoPlacePhone,
+        kakaoPlaceAddress: item.kakaoPlaceAddress,
+        kakaoPlaceLat: item.kakaoPlaceLat != null ? String(item.kakaoPlaceLat) : undefined,
+        kakaoPlaceLng: item.kakaoPlaceLng != null ? String(item.kakaoPlaceLng) : undefined,
         readOnly: "false",
         from: "history",
+        reviewWritten: reviewAlreadyWritten ? "true" : "false",
+        reviewMode: reviewAlreadyWritten ? "manage" : "write",
       },
     } as any);
   }
 
   const issueLabel = (t?: string | null) => {
     switch (String(t || "").toUpperCase()) {
-      case "CRACK":
-        return "균열";
-      case "LEAK":
-        return "누수";
       case "MOLD":
         return "곰팡이";
+      case "LEAK":
+        return "누수";
+      case "CRACK":
+        return "균열";
       case "PEEL":
-        return "벗겨짐";
+      case "PAINT_PEEL":
+        return "박리";
       case "CORROSION":
         return "부식";
       case "BULGE":
@@ -215,24 +263,19 @@ export default function Histories() {
 
   const getIssueIcon = (t?: string | null) => {
     switch (String(t || "").toUpperCase()) {
+      case "MOLD":
+        return { emoji: "🦠", color: "#f0fdf4" };
       case "LEAK":
         return { emoji: "💧", color: "#eff6ff" };
       case "CRACK":
-        return { emoji: "🧱", color: "#f5f3ff" };
-      case "MOLD":
-        return { emoji: "🦠", color: "#f0fdf4" };
+        return { emoji: "〰️", color: "#f8fafc" };
       case "PEEL":
-        return { emoji: "🎨", color: "#fff7ed" };
+      case "PAINT_PEEL":
+        return { emoji: "🍂", color: "#fff7ed" };
       case "CORROSION":
-        return { emoji: "🛠️", color: "#fef3c7" };
+        return { emoji: "🕳️", color: "#fef3c7" };
       case "BULGE":
-        return { emoji: "🧩", color: "#f0f9ff" };
-      case "DAMAGE":
-        return { emoji: "🔧", color: "#fff7ed" };
-      case "ELECTRIC":
-        return { emoji: "⚡", color: "#fefce8" };
-      case "GAS":
-        return { emoji: "🔥", color: "#fff1f2" };
+        return { emoji: "🧱", color: "#f0f9ff" };
       default:
         return { emoji: "🏠", color: "#f8fafc" };
     }
@@ -254,7 +297,7 @@ export default function Histories() {
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>진단 히스토리</Text>
-          <Text style={styles.headerSub}>나의 진단결과를 한눈에 확인하세요</Text>
+          <Text style={styles.headerSub}>우리 집 안전 기록을 한눈에 확인하세요</Text>
         </View>
 
         <View style={styles.filterWrapper}>
@@ -263,7 +306,7 @@ export default function Histories() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterScroll}
           >
-            {["전체", "균열", "누수", "곰팡이", "벗겨짐", "부식", "들뜸", "기타"].map(
+            {["전체", "곰팡이", "누수", "균열", "박리", "부식", "들뜸", "기타"].map(
                 (filter) => (
                     <Pressable
                         key={filter}
@@ -306,25 +349,24 @@ export default function Histories() {
                 </View>
             ) : (
                 filteredItems.map((it) => {
+                  console.log("history review debug", {
+                    id: getHistoryId(it),
+                    reportStatus: reportStatus[getHistoryId(it)],
+                    reservationId: (it as any).reservationId,
+                    reservationStatus: (it as any).reservationStatus,
+                    companyId: (it as any).companyId,
+                    kakaoPlaceId: (it as any).kakaoPlaceId,
+                    expertVendorName: (it as any).expertVendorName,
+                    reviewWritten: (it as any).reviewWritten,
+                  });
                   const id = getHistoryId(it);
-                  const status = reportStatus[id];
                   const iconData = getIssueIcon(it.issueType);
                   const isHighRisk = it.riskScore > 70;
                   const isLowRisk = it.riskScore < 30;
                   const reviewAvailable = canWriteReview(it);
-                  const vendorDisplayName = getReviewVendorName(it);
-
-                  console.log("history review debug", {
-                    id,
-                    status,
-                    companyId: it.companyId,
-                    expertVendorId: it.expertVendorId,
-                    kakaoPlaceId: it.kakaoPlaceId,
-                    expertVendorName: (it as any).expertVendorName,
-                    companyName: (it as any).companyName,
-                    kakaoPlaceName: (it as any).kakaoPlaceName,
-                    resolvedVendorName: vendorDisplayName,
-                  });
+                  const reviewWritten = Boolean((it as any).reviewWritten);
+                  const historyStatusText = getHistoryStatusText(it);
+                  const historyStatusColor = getHistoryStatusColor(it);
 
                   return (
                       <View key={id} style={styles.historyCard}>
@@ -377,27 +419,11 @@ export default function Histories() {
                             <View style={styles.cardFooterRow}>
                               <View style={styles.footerLeft}>
                                 <Feather name="calendar" size={12} color="#94a3b8" />
-                                <Text style={styles.cardDateText}>{it.createdAt || ""}</Text>
+                                <Text style={styles.cardDateText}>{formatDate(it.createdAt)}</Text>
                               </View>
 
-                              <Text
-                                  style={[
-                                    styles.statusText,
-                                    {
-                                      color:
-                                          status === "READY"
-                                              ? "#10b981"
-                                              : status === "GENERATING"
-                                                  ? "#3b82f6"
-                                                  : "#94a3b8",
-                                    },
-                                  ]}
-                              >
-                                {status === "READY"
-                                    ? "리포트 완료"
-                                    : status === "GENERATING"
-                                        ? "분석 중"
-                                        : "분석 대기"}
+                              <Text style={[styles.statusText, { color: historyStatusColor }]}>
+                                {historyStatusText}
                               </Text>
                             </View>
 
@@ -424,36 +450,36 @@ export default function Histories() {
                           </View>
                         </Pressable>
 
-                        {status === "READY" && (
+                        {hasReservation(it) && (
                             <Pressable
                                 onPress={() => {
-                                  if (!reviewAvailable || it.reviewWritten) return;
+                                  if (!reviewAvailable && !reviewWritten) return;
                                   handleReviewPress(it);
                                 }}
-                                disabled={it.reviewWritten || !reviewAvailable}
+                                disabled={!reviewAvailable && !reviewWritten}
                                 style={[
                                   styles.reviewWriteBtn,
-                                  (it.reviewWritten || !reviewAvailable) && styles.reviewWriteBtnDisabled,
+                                  !reviewAvailable && !reviewWritten && styles.reviewWriteBtnDisabled,
+                                  reviewWritten && styles.reviewManageBtn,
                                 ]}
                             >
                               <Feather
-                                  name={it.reviewWritten ? "check" : reviewAvailable ? "edit-3" : "lock"}
+                                  name={reviewWritten ? "message-square" : reviewAvailable ? "edit-3" : "lock"}
                                   size={15}
-                                  color={it.reviewWritten || !reviewAvailable ? "#94a3b8" : MAIN_BLUE}
+                                  color={!reviewAvailable && !reviewWritten ? "#94a3b8" : MAIN_BLUE}
                               />
 
                               <Text
                                   style={[
                                     styles.reviewWriteText,
-                                    (it.reviewWritten || !reviewAvailable) &&
-                                    styles.reviewWriteTextDisabled,
+                                    !reviewAvailable && !reviewWritten && styles.reviewWriteTextDisabled,
                                   ]}
                               >
-                                {it.reviewWritten
-                                    ? "리뷰 작성 완료"
+                                {reviewWritten
+                                    ? "내 리뷰 관리"
                                     : reviewAvailable
                                         ? "리뷰 작성"
-                                        : "업체 연결 후 리뷰 가능"}
+                                        : "수리 완료 후 리뷰 가능"}
                               </Text>
                             </Pressable>
                         )}
@@ -648,6 +674,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderColor: "#e2e8f0",
   },
+
+  reviewManageBtn: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#bfdbfe",
+  },
+
 
   reviewWriteText: {
     color: MAIN_BLUE,

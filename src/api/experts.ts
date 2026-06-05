@@ -50,17 +50,18 @@ export type NearbyCompanyRequest = {
   keyword?: string;
 };
 
-type Coordinates = {
+export type Coordinates = {
   latitude: number;
   longitude: number;
 };
 
 /**
- * GPS가 없을 때도 지역 탭 기준으로 카카오 외부업체 검색을 하기 위한 중심 좌표.
+ * 지역 탭만 눌렀을 때도 카카오 외부 업체를 검색하기 위한 지역 중심 좌표.
+ * 백엔드 nearby API는 lat/lon 파라미터를 받는다.
  */
 export const REGION_COORDS: Record<VendorRegion, Coordinates> = {
   서울: { latitude: 37.5665, longitude: 126.9780 },
-  경기: { latitude: 37.4138, longitude: 127.5183 },
+  경기: { latitude: 37.2636, longitude: 127.0286 },
   인천: { latitude: 37.4563, longitude: 126.7052 },
   부산: { latitude: 35.1796, longitude: 129.0756 },
   대구: { latitude: 35.8714, longitude: 128.6014 },
@@ -88,16 +89,13 @@ function extractListFromResponse(data: any): any[] {
 function toBoolean(value: unknown): boolean {
   if (value === true) return true;
   if (value === false) return false;
-
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     return normalized === "true" || normalized === "t" || normalized === "1" || normalized === "yes";
   }
-
   if (typeof value === "number") {
     return value === 1;
   }
-
   return false;
 }
 
@@ -122,27 +120,12 @@ function issueTypeToKeyword(issueType: IssueType): string {
   return "집수리";
 }
 
-function sortVendors(
-    vendors: ExpertVendor[],
-    sortKey: ExpertVendorSort,
-    direction: "asc" | "desc"
-): ExpertVendor[] {
-  const dir = direction === "asc" ? 1 : -1;
-
+function sortPartnerFirstByName(vendors: ExpertVendor[]): ExpertVendor[] {
   return [...vendors].sort((a, b) => {
-    // 제휴업체 우선 노출
     const partnerDiff = Number(!!b.isPartner) - Number(!!a.isPartner);
     if (partnerDiff !== 0) return partnerDiff;
 
-    if (sortKey === "price") {
-      return ((a.minPrice ?? 0) - (b.minPrice ?? 0)) * dir;
-    }
-
-    if (sortKey === "rating") {
-      return ((a.rating ?? 0) - (b.rating ?? 0)) * dir;
-    }
-
-    return String(a.name ?? "").localeCompare(String(b.name ?? ""), "ko") * dir;
+    return String(a.name ?? "").localeCompare(String(b.name ?? ""), "ko");
   });
 }
 
@@ -153,10 +136,7 @@ function normalizeVendor(raw: any): ExpertVendor {
 
   // /api/experts/vendors 는 제휴업체 전용 엔드포인트이므로 기본값은 true.
   const isPartner =
-      raw?.partner === false ||
-      raw?.isPartner === false ||
-      raw?.partner === "false" ||
-      raw?.isPartner === "false"
+      raw?.partner === false || raw?.isPartner === false || raw?.partner === "false" || raw?.isPartner === "false"
           ? false
           : true;
 
@@ -216,15 +196,6 @@ function normalizeVendor(raw: any): ExpertVendor {
   };
 }
 
-/**
- * 기존 업체 목록 조회 함수.
- *
- * 수정 포인트:
- * - 기존에는 GPS가 없으면 /api/experts/vendors만 호출해서 제휴업체만 나왔다.
- * - 이제 지역 중심 좌표(REGION_COORDS)를 이용해서 /api/companies/nearby를 먼저 호출한다.
- * - 그래서 인천/부산/대구/대전/울산에서도 카카오 외부업체가 같이 나온다.
- * - nearby 호출 실패 시에만 기존 제휴업체 API로 fallback 한다.
- */
 export async function listExpertVendors(params: {
   region: string;
   issueType: IssueType;
@@ -234,20 +205,22 @@ export async function listExpertVendors(params: {
   const region = params.region as VendorRegion;
   const regionCoords = REGION_COORDS[region];
 
+  // 위치 권한이 없어도 지역 탭만 눌렀을 때 외부 업체까지 보이게 한다.
+  // 실제 사용자 거리순은 expert.tsx에서 사용자 좌표로 다시 계산한다.
   if (regionCoords) {
     try {
       const nearbyVendors = await listNearbyCompanies({
         latitude: regionCoords.latitude,
         longitude: regionCoords.longitude,
         region: params.region,
-        keyword: issueTypeToKeyword(params.issueType),
+        keyword: `${params.region} ${issueTypeToKeyword(params.issueType)}`.trim(),
       });
 
       if (nearbyVendors.length > 0) {
-        return sortVendors(nearbyVendors, params.sortKey, params.direction);
+        return sortPartnerFirstByName(nearbyVendors);
       }
     } catch (err) {
-      console.warn("[listExpertVendors] nearby search failed, fallback to partner-only API:", err);
+      console.log("[listExpertVendors] 지역 중심 업체 조회 실패. 제휴업체 API로 fallback:", err);
     }
   }
 
@@ -260,7 +233,7 @@ export async function listExpertVendors(params: {
     },
   });
 
-  return extractListFromResponse(res.data).map(normalizeVendor);
+  return sortPartnerFirstByName(extractListFromResponse(res.data).map(normalizeVendor));
 }
 
 /**

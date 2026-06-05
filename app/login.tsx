@@ -75,7 +75,7 @@ export default function Login() {
             <Text style={{ fontSize: 30 }}>🏠</Text>
           </View>
           <Text style={styles.logoTitle}>DduckTack</Text>
-          <Text style={styles.logoSubTitle}>AI 기반 주택 진단 서비스</Text>
+          <Text style={styles.logoSubTitle}>AI 기반 주거 하자 진단 서비스</Text>
         </View>
 
         {/* 입력 폼 */}

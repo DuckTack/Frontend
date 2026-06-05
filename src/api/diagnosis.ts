@@ -21,27 +21,39 @@ export type DiagnosisProduct = {
   estimated_price: number;
 };
 
+export type DiagnosisGuideBody = {
+  title: string;
+  summary: string;
+  difficulty: "easy" | "medium" | "hard" | string;
+  steps: DiagnosisStep[];
+  warnings: string[];
+  estimated_time_min: number;
+  next_action: "DIY_OK" | "RECALL_IN_24H" | "CALL_PRO";
+};
+
 export type DiagnosisApiResult = {
   diagnosisId: number;
-  imageUrl: string;
+  imageUrl?: string | null;
+  createdAt?: string;
+
   issueType: string;
   mainDefect: string;
   riskScore: number;
   riskScore100: number;
   riskLevel: string;
   detectionCount: number;
-  guide: {
-    guide: {
-      title: string;
-      summary: string;
-      difficulty: string;
-      steps: DiagnosisStep[];
-      warnings: string[];
-      estimated_time_min: number;
-      next_action: "DIY_OK" | "RECALL_IN_24H" | "CALL_PRO";
-    };
-    products: DiagnosisProduct[];
-  };
+
+  guide?: {
+    guide?: DiagnosisGuideBody | null;
+
+    /**
+     * 과거 LLM 응답 호환용.
+     * 현재 화면에서는 products를 사용하지 않는다.
+     * 추천 물품은 /api/products?category=... DB 조회 결과만 사용한다.
+     */
+    products?: DiagnosisProduct[] | null;
+  } | null;
+
   guideFallback: boolean;
 };
 
@@ -53,11 +65,13 @@ export async function setPendingImages(uris: string[]) {
 export async function getPendingImages(): Promise<string[]> {
   const raw = await AsyncStorage.getItem(PENDING_IMAGES_KEY);
   if (!raw) return [];
+
   try {
     const parsed = JSON.parse(raw);
+
     return Array.isArray(parsed)
-      ? parsed.filter((x): x is string => typeof x === "string")
-      : [];
+        ? parsed.filter((x): x is string => typeof x === "string")
+        : [];
   } catch {
     return [];
   }
@@ -71,11 +85,22 @@ export async function clearPendingImages() {
 export async function getLastDiagnosisResult(): Promise<DiagnosisApiResult | null> {
   const raw = await AsyncStorage.getItem(LAST_DIAGNOSIS_KEY);
   if (!raw) return null;
+
   try {
     return JSON.parse(raw);
   } catch {
     return null;
   }
+}
+
+export async function setLastDiagnosisResult(data: DiagnosisApiResult) {
+  await AsyncStorage.setItem(LAST_DIAGNOSIS_KEY, JSON.stringify(data));
+}
+
+// ─── 저장된 진단 결과 조회 ────────────────────────────────────
+export async function getDiagnosisResult(diagnosisId: string | number): Promise<DiagnosisApiResult> {
+  const res = await apiClient.get(`/api/diagnosis/${diagnosisId}`);
+  return res.data?.data ?? res.data;
 }
 
 // ─── 메인: 진단 시작 (/api/diagnosis 호출) ────────────────────
@@ -85,7 +110,7 @@ export async function startDiagnosis(preferDiy = false): Promise<{
   const images = await getPendingImages();
   if (images.length === 0) throw new Error("NO_PENDING_IMAGES");
 
-  // 첫 번째 이미지 사용 (새 엔드포인트는 이미지 1장)
+  // 첫 번째 이미지 사용
   const uri = images[0];
   const filename = uri.split("/").pop() || "image.jpg";
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -98,13 +123,12 @@ export async function startDiagnosis(preferDiy = false): Promise<{
 
   const res = await apiClient.post(url, formData, {
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 90000, // YOLO + LLM 합산 최대 90초
+    timeout: 90000,
   });
 
   const data: DiagnosisApiResult = res.data?.data ?? res.data;
 
-  // 결과를 AsyncStorage에 캐싱
-  await AsyncStorage.setItem(LAST_DIAGNOSIS_KEY, JSON.stringify(data));
+  await setLastDiagnosisResult(data);
   await clearPendingImages();
 
   return { diagnosisId: String(data.diagnosisId) };

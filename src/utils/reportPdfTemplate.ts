@@ -24,8 +24,9 @@ function escapeHtml(value: unknown): string {
 
 function formatDate(value?: string): string {
   if (!value) return "-";
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
+  if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() < 2000) return "-";
   return parsed.toISOString().slice(0, 10);
 }
 
@@ -164,8 +165,17 @@ export function buildReportPdfHtml(input: ReportPdfTemplateInput): string {
     .image-card figcaption { padding: 8px 10px; color: #475569; font-size: 11px; font-weight: 800; }
     .empty-image { margin-top: 12px; padding: 16px; border-radius: 16px; background: #f8fafc; color: #94a3b8; text-align: center; font-weight: 700; }
     .memo { margin-top: 12px; padding: 14px; white-space: pre-wrap; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; }
-    .footer { margin-top: 20px; padding-top: 14px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 11px; }
-  </style>
+    .footer {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+}  </style>
 </head>
 <body>
   <header class="cover">
@@ -173,8 +183,6 @@ export function buildReportPdfHtml(input: ReportPdfTemplateInput): string {
     <h1>AI 진단 기반<br/>수리 기록 리포트</h1>
     <p>진단 결과, 수리 전/후 사진, 사용자 입력 수리 내역을 하나의 PDF로 정리했습니다.</p>
     <div class="cover-meta">
-      <span class="cover-chip">리포트 ID ${escapeHtml(reportId)}</span>
-      <span class="cover-chip">진단 ID ${escapeHtml(diagnosisId || "-")}</span>
       <span class="cover-chip">생성일 ${generatedAt}</span>
     </div>
   </header>
@@ -230,13 +238,11 @@ export function buildReportPdfHtml(input: ReportPdfTemplateInput): string {
       ${isPro ? `
         <tr><th>업체명</th><td>${escapeHtml(draft.contractorName || "-")}</td></tr>
         <tr><th>업체 연락처</th><td>${escapeHtml(draft.contractorContact || "-")}</td></tr>
-        <tr><th>재료비</th><td>${escapeHtml(money(draft.materialCost))}</td></tr>
-        <tr><th>인건비</th><td>${escapeHtml(money(draft.laborCost))}</td></tr>
-        <tr><th>총 비용</th><td>${escapeHtml(money(draft.totalCost))}</td></tr>
+        <tr><th>총 비용</th><td>${escapeHtml(money(draft.totalCost || draft.actualCostKrw))}</td></tr>
       ` : ""}
     </table>
     <div class="memo"><b>작업 요약</b><br/>${escapeHtml(draft.repairSummary || "-")}</div>
-    <div class="memo"><b>메모</b><br/>${escapeHtml(draft.notes || draft.diyWorkMemo || "-")}</div>
+    <div class="memo"><b>사용자 메모</b><br/>${escapeHtml(draft.notes || draft.diyWorkMemo || "-")}</div>
   </section>
 
   <div class="footer">

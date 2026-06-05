@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -128,6 +128,7 @@ export default function ExpertBooking() {
   const [issueSummary, setIssueSummary] = useState("");
   const [requestNote, setRequestNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const [unavailableDates, setUnavailableDates] = useState<string[]>([]);
   const [unavailableTimes, setUnavailableTimes] = useState<string[]>([]);
@@ -254,7 +255,7 @@ export default function ExpertBooking() {
   }
 
   async function handleReserve() {
-    if (submitting) return;
+    if (submitting || submitLockRef.current) return;
 
     if (!isReservablePartner) {
       Alert.alert("예약 불가", "제휴업체만 앱에서 예약할 수 있습니다.");
@@ -287,6 +288,8 @@ export default function ExpertBooking() {
       return;
     }
 
+    submitLockRef.current = true;
+
     try {
       setSubmitting(true);
 
@@ -310,13 +313,32 @@ export default function ExpertBooking() {
 
       await apiClient.post("/api/reservations", body);
 
-      Alert.alert("예약 완료", "업체 예약관리 페이지에서 예약을 확인할 수 있습니다.");
-      router.back();
+      Alert.alert(
+          "예약 신청 완료",
+          "전문업체 예약 신청이 완료되었습니다. 홈 화면에서 예약 진행 상태를 확인할 수 있습니다.",
+          [
+            {
+              text: "확인",
+              onPress: () => {
+                router.replace("/(tabs)");
+              },
+            },
+          ]
+      );
     } catch (e: any) {
       console.log("예약 실패:", e?.response?.data ?? e?.message ?? e);
-      Alert.alert("예약 실패", e?.response?.data?.message ?? "예약 요청 중 문제가 발생했습니다.");
+
+      const status = e?.response?.status;
+      const message =
+          e?.response?.data?.message ||
+          (status === 409
+              ? "이미 해당 시간에 예약이 있습니다. 다른 시간을 선택해주세요."
+              : "예약 요청 중 문제가 발생했습니다.");
+
+      Alert.alert("예약 실패", message);
     } finally {
       setSubmitting(false);
+      submitLockRef.current = false;
     }
   }
 
