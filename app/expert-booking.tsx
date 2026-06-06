@@ -37,16 +37,25 @@ const RESERVATION_TIMES = [
   "21:00",
 ];
 
-function issueLabel(t?: string) {
-  const labels: Record<string, string> = {
-    CRACK: "균열",
-    LEAK: "누수",
-    MOLD: "곰팡이",
-    DAMAGE: "파손",
-    ELECTRIC: "전기",
-    GAS: "가스",
-  };
-  return labels[t as IssueType] || "기타";
+function issueLabel(t?: string | null) {
+  const value = String(t ?? "").trim().toUpperCase();
+
+  switch (value) {
+    case "CRACK":
+      return "균열";
+    case "LEAK":
+      return "누수";
+    case "MOLD":
+      return "곰팡이";
+    case "PEEL":
+      return "박리";
+    case "CORROSION":
+      return "부식";
+    case "BULGE":
+      return "들뜸";
+    default:
+      return "기타";
+  }
 }
 
 function isValidDate(value: string) {

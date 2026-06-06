@@ -13,10 +13,10 @@ import {
   KeyboardAvoidingView,
   Image,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import ScreenState from "../../src/components/ScreenState";
 import { getMe, Me } from "../../src/api/users";
@@ -43,26 +43,23 @@ const MAX_AFTER_IMAGES = 3;
 
 type ImageField = "beforeImageUris" | "afterImageUris";
 
-function fmtIssue(t: HistoryDetail["issueType"]) {
-  switch (String(t || "").toUpperCase()) {
+function fmtIssue(t?: string | null) {
+  const value = String(t ?? "").trim().toUpperCase();
+
+  switch (value) {
     case "CRACK":
       return "균열";
-
     case "LEAK":
       return "누수";
-
     case "MOLD":
       return "곰팡이";
-
     case "PEEL":
+    case "PAINT_PEEL":
       return "박리";
-
     case "CORROSION":
       return "부식";
-
     case "BULGE":
       return "들뜸";
-
     default:
       return "기타";
   }
@@ -153,23 +150,6 @@ function formatDisplayDate(value: unknown): string {
   return "-";
 }
 
-
-function getDiagnosisDateValue(historyData: HistoryDetail | null, fallback?: unknown): unknown {
-  const h: any = historyData;
-  return (
-      h?.diagnosisDate ??
-      h?.diagnosedAt ??
-      h?.diagnosisCreatedAt ??
-      h?.diagnosisCreatedDate ??
-      h?.analysisCompletedAt ??
-      h?.analyzedAt ??
-      h?.createdAt ??
-      h?.createdDate ??
-      h?.created_at ??
-      fallback
-  );
-}
-
 function getReservedCompanyName(historyData: HistoryDetail | null): string {
   const h: any = historyData;
 
@@ -193,6 +173,121 @@ function getReservedCompanyPhone(historyData: HistoryDetail | null): string {
       cleanAutoValue(h?.phone) ||
       ""
   );
+}
+
+function getReservationRepairInfo(historyData: HistoryDetail | null) {
+  const h: any = historyData;
+
+  if (!h) {
+    return {
+      repairCompletedDate: "",
+      repairTotalCost: "",
+      repairSummary: "",
+      contractorName: "",
+      contractorContact: "",
+    };
+  }
+
+  return {
+    repairCompletedDate: cleanAutoValue(
+        h.repairCompletedDate || h.reservationRepairCompletedDate,
+    ),
+    repairTotalCost: normalizeCost(
+        h.repairTotalCost ?? h.reservationRepairTotalCost ?? h.totalCost,
+    ),
+    repairSummary: cleanAutoValue(
+        h.repairSummary || h.reservationRepairSummary,
+    ),
+    contractorName: getReservedCompanyName(historyData),
+    contractorContact: getReservedCompanyPhone(historyData),
+  };
+}
+
+function buildMethodDraft(input: ReportDraft): ReportDraft {
+  const method = normalizeRepairMethod(input.repairMethod);
+
+  if (method === "DIY") {
+    const diyMaterialCost = normalizeCost(
+        input.diyMaterialCost || (input as any).materialCost,
+    );
+
+    return {
+      ...input,
+      repairMethod: "DIY",
+      contractorName: "",
+      contractorContact: "",
+      totalCost: "",
+      diyMaterialCost,
+      materialCost: diyMaterialCost,
+      repairSummary: cleanAutoValue(input.repairSummary),
+      diyMaterialsUsed: cleanAutoValue(input.diyMaterialsUsed),
+      diyWorkMemo: cleanAutoValue(input.diyWorkMemo),
+      notes: cleanAutoValue(input.notes),
+    } as ReportDraft;
+  }
+
+  if (method === "PRO") {
+    return {
+      ...input,
+      repairMethod: "PRO",
+      repairDate: cleanAutoValue(input.repairDate),
+      contractorName: cleanAutoValue(input.contractorName),
+      contractorContact: cleanAutoValue(input.contractorContact),
+      totalCost: normalizeCost(input.totalCost),
+      repairSummary: cleanAutoValue(input.repairSummary),
+      diyMaterialsUsed: "",
+      diyMaterialCost: "",
+      diyWorkMemo: "",
+      materialCost: "",
+      notes: cleanAutoValue(input.notes),
+    } as ReportDraft;
+  }
+
+  return { ...input, repairMethod: "" } as ReportDraft;
+}
+
+function validateDraftBeforeSave(input: ReportDraft): boolean {
+  const method = normalizeRepairMethod(input.repairMethod);
+
+  if (!method) {
+    Alert.alert("수리 방식 선택", "직접 수리 또는 전문업체 수리를 선택해주세요.");
+    return false;
+  }
+
+  if (method === "DIY") {
+    const missing: string[] = [];
+
+    if (!cleanAutoValue(input.diyMaterialsUsed)) missing.push("사용한 자재");
+    if (!normalizeCost(input.diyMaterialCost || (input as any).materialCost)) missing.push("자재비");
+    if (!cleanAutoValue(input.diyWorkMemo)) missing.push("직접 수리 메모");
+    if (!cleanAutoValue(input.repairSummary)) missing.push("실제 작업 요약");
+
+    if (missing.length > 0) {
+      Alert.alert(
+          "직접 수리 정보 필요",
+          `직접 수리 PDF를 생성하려면 ${missing.join(", ")} 항목을 입력해야 합니다.`,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  const missing: string[] = [];
+
+  if (!cleanAutoValue(input.repairDate)) missing.push("수리 완료일");
+  if (!normalizeCost(input.totalCost)) missing.push("총 비용");
+  if (!cleanAutoValue(input.repairSummary)) missing.push("실제 작업 요약");
+
+  if (missing.length > 0) {
+    Alert.alert(
+        "전문업체 수리 정보 필요",
+        `전문업체 수리 PDF를 생성하려면 ${missing.join(", ")} 항목을 입력해야 합니다.`,
+    );
+    return false;
+  }
+
+  return true;
 }
 
 type RemoteReportDraft = {
@@ -261,72 +356,31 @@ function applyReservationRepairInfoToDraft(
     draft: ReportDraft,
     historyData: HistoryDetail | null,
 ): ReportDraft {
-  const h: any = historyData;
-  if (!h) return draft;
+  if (draft.repairMethod === "DIY") {
+    return draft;
+  }
 
-  const repairCompletedDate = cleanAutoValue(
-      h.repairCompletedDate || h.reservationRepairCompletedDate,
-  );
-  const repairTotalCost = normalizeCost(
-      h.repairTotalCost ?? h.reservationRepairTotalCost ?? h.totalCost,
-  );
-  const repairSummary = cleanAutoValue(
-      h.repairSummary || h.reservationRepairSummary,
-  );
-
-  const contractorName = getReservedCompanyName(historyData);
-  const contractorContact = getReservedCompanyPhone(historyData);
+  const repairInfo = getReservationRepairInfo(historyData);
 
   const hasRepairInfo = Boolean(
-      repairCompletedDate || repairTotalCost || repairSummary || contractorName || contractorContact,
+      repairInfo.repairCompletedDate ||
+      repairInfo.repairTotalCost ||
+      repairInfo.repairSummary ||
+      repairInfo.contractorName ||
+      repairInfo.contractorContact,
   );
+
   if (!hasRepairInfo) return draft;
 
   return {
     ...draft,
     repairMethod: "PRO",
-    repairDate: repairCompletedDate || draft.repairDate,
-    contractorName: contractorName || draft.contractorName,
-    contractorContact: contractorContact || draft.contractorContact,
-    totalCost: repairTotalCost || draft.totalCost,
-    repairSummary: repairSummary || draft.repairSummary,
+    repairDate: repairInfo.repairCompletedDate || draft.repairDate,
+    contractorName: repairInfo.contractorName || draft.contractorName,
+    contractorContact: repairInfo.contractorContact || draft.contractorContact,
+    totalCost: repairInfo.repairTotalCost || draft.totalCost,
+    repairSummary: repairInfo.repairSummary || draft.repairSummary,
   };
-}
-function getDraftText(draftData: ReportDraft, key: string): string {
-  const value = (draftData as any)?.[key];
-  return value === null || value === undefined ? "" : String(value);
-}
-
-function isBlankText(value: unknown): boolean {
-  return !cleanAutoValue(value);
-}
-
-function getActiveRepairSummary(draftData: ReportDraft): string {
-  if (draftData.repairMethod === "DIY") {
-    return getDraftText(draftData, "diyRepairSummary");
-  }
-  return draftData.repairSummary || "";
-}
-
-function validateDraftBeforeSave(draftData: ReportDraft, showAlert: boolean): boolean {
-  if (draftData.repairMethod !== "DIY") return true;
-
-  const missing =
-      isBlankText(draftData.diyMaterialsUsed) ||
-      isBlankText(draftData.diyMaterialCost || (draftData as any).materialCost) ||
-      isBlankText(draftData.diyWorkMemo) ||
-      isBlankText(getDraftText(draftData, "diyRepairSummary"));
-
-  if (!missing) return true;
-
-  if (showAlert) {
-    Alert.alert(
-        "직접 수리 정보 입력 필요",
-        "직접 수리는 사용한 자재, 자재비, 직접 수리 메모, 실제 작업 요약을 모두 입력해야 저장 및 PDF 생성이 가능합니다."
-    );
-  }
-
-  return false;
 }
 
 export default function ReportDetail() {
@@ -345,7 +399,7 @@ export default function ReportDetail() {
       reportId: String(reportId ?? history.id),
       historyId: String(history.id),
       diagnosisId: String(history.diagnosisId ?? ""),
-      createdAt: getDiagnosisDateValue(history),
+      createdAt: history.createdAt,
       issueType: history.issueType,
       riskScore: history.riskScore,
       recommendation: history.recommendation,
@@ -386,10 +440,8 @@ export default function ReportDetail() {
           localDraftData ?? createEmptyDraft(),
           remoteDraftData,
       );
-      if (nextDraft.repairMethod !== "DIY") {
-        nextDraft = applyReservedCompanyToDraft(nextDraft, historyData);
-        nextDraft = applyReservationRepairInfoToDraft(nextDraft, historyData);
-      }
+      nextDraft = applyReservedCompanyToDraft(nextDraft, historyData);
+      nextDraft = applyReservationRepairInfoToDraft(nextDraft, historyData);
 
       setDraft(nextDraft);
     } catch (e) {
@@ -453,10 +505,6 @@ export default function ReportDetail() {
   async function saveDraftToServer(showSuccessMessage: boolean): Promise<boolean> {
     if (!reportId) return false;
 
-    if (!validateDraftBeforeSave(draft, showSuccessMessage)) {
-      return false;
-    }
-
     try {
       setSavingDraft(true);
 
@@ -471,29 +519,37 @@ export default function ReportDetail() {
         return false;
       }
 
-      const activeRepairSummary = getActiveRepairSummary(draft);
+      const methodDraft = buildMethodDraft(draft);
+
       const cleanedDraft: ReportDraft = {
-        ...draft,
-        repairSummary: activeRepairSummary,
-        beforeImageUris: uniqueStrings(draft.beforeImageUris).slice(0, MAX_BEFORE_EXTRA_IMAGES),
-        afterImageUris: uniqueStrings(draft.afterImageUris).slice(0, MAX_AFTER_IMAGES),
+        ...methodDraft,
+        beforeImageUris: uniqueStrings(methodDraft.beforeImageUris).slice(0, MAX_BEFORE_EXTRA_IMAGES),
+        afterImageUris: uniqueStrings(methodDraft.afterImageUris).slice(0, MAX_AFTER_IMAGES),
       };
+
+      if (!validateDraftBeforeSave(cleanedDraft)) {
+        return false;
+      }
 
       await saveLocalReportDraft(String(reportId), cleanedDraft);
       setDraft(cleanedDraft);
 
+      const actualCostKrw = cleanedDraft.repairMethod === "DIY"
+          ? Number(normalizeCost(cleanedDraft.diyMaterialCost || (cleanedDraft as any).materialCost) || 0)
+          : Number(normalizeCost(cleanedDraft.totalCost) || 0);
+
       await saveReportDraft(String(reportBase.diagnosisId), {
         repairMethod: cleanedDraft.repairMethod,
         repairDate: cleanedDraft.repairDate,
-        contractorName: cleanedDraft.contractorName,
-        contractorContact: cleanedDraft.contractorContact,
+        contractorName: cleanedDraft.repairMethod === "PRO" ? cleanedDraft.contractorName : "",
+        contractorContact: cleanedDraft.repairMethod === "PRO" ? cleanedDraft.contractorContact : "",
         repairSummary: cleanedDraft.repairSummary,
-        actualCostKrw: Number(cleanedDraft.totalCost || cleanedDraft.diyMaterialCost || 0),
+        actualCostKrw,
         notes: cleanedDraft.notes,
-        totalCost: cleanedDraft.totalCost,
-        diyMaterialsUsed: cleanedDraft.diyMaterialsUsed,
-        diyMaterialCost: cleanedDraft.diyMaterialCost,
-        diyWorkMemo: cleanedDraft.diyWorkMemo,
+        totalCost: cleanedDraft.repairMethod === "PRO" ? cleanedDraft.totalCost : "",
+        diyMaterialsUsed: cleanedDraft.repairMethod === "DIY" ? cleanedDraft.diyMaterialsUsed : "",
+        diyMaterialCost: cleanedDraft.repairMethod === "DIY" ? cleanedDraft.diyMaterialCost : "",
+        diyWorkMemo: cleanedDraft.repairMethod === "DIY" ? cleanedDraft.diyWorkMemo : "",
         diagnosisImageKeys: diagnosisBeforeImageKeys,
         useDiagnosisImagesAsBefore: true,
         templateVersion: "FRONTEND_REPORT_V1",
@@ -528,10 +584,6 @@ export default function ReportDetail() {
   }
 
   async function handleGenerate() {
-    if (!validateDraftBeforeSave(draft, true)) {
-      return;
-    }
-
     if (!reportBase?.diagnosisId || !history) {
       Alert.alert("PDF 생성 불가", "진단 기록을 불러온 뒤 다시 시도해주세요.");
       return;
@@ -543,31 +595,23 @@ export default function ReportDetail() {
       const saved = await saveDraftToServer(false);
       if (!saved) return;
 
-      const baseDraftForPdf: ReportDraft = {
-        ...draft,
-        repairSummary: getActiveRepairSummary(draft),
-      };
-
-      const pdfDraft = baseDraftForPdf.repairMethod === "PRO"
-          ? applyReservationRepairInfoToDraft(
-              applyReservedCompanyToDraft(baseDraftForPdf, history),
+      const pdfDraft = buildMethodDraft(
+          applyReservationRepairInfoToDraft(
+              applyReservedCompanyToDraft(draft, history),
               history,
-          )
-          : baseDraftForPdf;
+          ),
+      );
 
-      const historyForPdf = {
-        ...(history as any),
-        diagnosisDate: getDiagnosisDateValue(history, reportBase.createdAt),
-        diagnosedAt: getDiagnosisDateValue(history, reportBase.createdAt),
-        createdAt: getDiagnosisDateValue(history, reportBase.createdAt),
-      } as HistoryDetail;
+      if (!validateDraftBeforeSave(pdfDraft)) {
+        return;
+      }
 
       const pdf = await createDesignedReportPdf({
         reportId: reportBase.reportId,
         diagnosisId: reportBase.diagnosisId,
-        createdAt: getDiagnosisDateValue(history, reportBase.createdAt),
+        createdAt: reportBase.createdAt,
         user: me,
-        history: historyForPdf,
+        history,
         draft: pdfDraft,
         beforeImages: uniqueStrings([
           ...diagnosisBeforeImageUris.slice(0, 1),
@@ -602,7 +646,7 @@ export default function ReportDetail() {
 
   return (
       <SafeAreaView edges={["top"]} style={styles.safeArea}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: "#fff" }}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboardAvoidingView}>
           <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
             <View style={styles.header}>
               <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -610,7 +654,7 @@ export default function ReportDetail() {
               </Pressable>
               <View>
                 <Text style={styles.headerTitle}>리포트 상세</Text>
-                <Text style={styles.headerSubtitle}>진단 결과와 수리 기록을 확인하세요</Text>
+                <Text style={styles.headerSubtitle}>진단 결과 및 수리 내역을 확인하세요</Text>
               </View>
             </View>
 
@@ -619,7 +663,7 @@ export default function ReportDetail() {
                 <Ionicons name="person-circle-outline" size={20} color={MAIN_BLUE} />
                 <Text style={styles.cardTitle}>기본 정보</Text>
               </View>
-              <View style={styles.infoRow}><Text style={styles.infoLabel}>진단일</Text><Text style={styles.infoValue}>{formatDisplayDate(getDiagnosisDateValue(history, reportBase?.createdAt))}</Text></View>
+              <View style={styles.infoRow}><Text style={styles.infoLabel}>진단일시</Text><Text style={styles.infoValue}>{formatDisplayDate(reportBase?.createdAt)}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>사용자</Text><Text style={styles.infoValue}>{me?.username || "-"}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabel}>연락처</Text><Text style={styles.infoValue}>{me?.phoneNumber || "-"}</Text></View>
               <View style={[styles.infoRow, { borderBottomWidth: 0 }]}><Text style={styles.infoLabel}>주소</Text><Text style={styles.infoValue}>{me?.address || "-"}</Text></View>
@@ -642,16 +686,55 @@ export default function ReportDetail() {
                 <Ionicons name="create-outline" size={20} color="#6366f1" />
                 <Text style={styles.cardTitle}>수리 후 직접 입력</Text>
               </View>
-              <Text style={styles.requiredGuideText}>직접 수리는 사용한 자재, 자재비, 직접 수리 메모, 실제 작업 요약을 입력해야 PDF가 생성됩니다.</Text>
 
               <View style={styles.tabContainer}>
-                <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "DIY" }))} style={[styles.tab, draft.repairMethod === "DIY" && styles.tabActive]}>
+                <Pressable
+                    onPress={() => setDraft((prev) => {
+                      const repairInfo = getReservationRepairInfo(history);
+                      const shouldClearAutoSummary =
+                          cleanAutoValue(prev.repairSummary) === repairInfo.repairSummary;
+
+                      return {
+                        ...prev,
+                        repairMethod: "DIY",
+                        contractorName: "",
+                        contractorContact: "",
+                        totalCost: "",
+                        repairSummary: shouldClearAutoSummary ? "" : prev.repairSummary,
+                      };
+                    })}
+                    style={[styles.tab, draft.repairMethod === "DIY" && styles.tabActive]}
+                >
                   <Text style={[styles.tabText, draft.repairMethod === "DIY" && styles.tabTextActive]}>직접 수리</Text>
                 </Pressable>
-                <Pressable onPress={() => setDraft((prev) => ({ ...prev, repairMethod: "PRO" }))} style={[styles.tab, draft.repairMethod === "PRO" && styles.tabActive]}>
+                <Pressable
+                    onPress={() => setDraft((prev) => applyReservationRepairInfoToDraft({ ...prev, repairMethod: "PRO" }, history))}
+                    style={[styles.tab, draft.repairMethod === "PRO" && styles.tabActive]}
+                >
                   <Text style={[styles.tabText, draft.repairMethod === "PRO" && styles.tabTextActive]}>전문업체 수리</Text>
                 </Pressable>
               </View>
+
+              {draft.repairMethod === "DIY" ? (
+                  <View style={styles.noticeBox}>
+                    <Ionicons name="information-circle-outline" size={18} color={MAIN_BLUE} />
+                    <Text style={styles.noticeText}>
+                      직접 수리는 사용한 자재, 자재비, 직접 수리 메모,{"\n"}실제 작업 요약을 모두 입력해야 PDF가 생성됩니다.
+                    </Text>
+                  </View>
+              ) : draft.repairMethod === "PRO" ? (
+                  <View style={styles.noticeBox}>
+                    <Ionicons name="information-circle-outline" size={18} color={MAIN_BLUE} />
+                    <Text style={styles.noticeText}>
+                      전문업체 수리는 업체가 수리 완료일, 총 비용,{"\n"}실제 작업 요약을 입력해야 PDF가 생성됩니다.
+                    </Text>
+                  </View>
+              ) : (
+                  <View style={styles.noticeBox}>
+                    <Ionicons name="information-circle-outline" size={18} color={MAIN_BLUE} />
+                    <Text style={styles.noticeText}>수리 방식을 선택한 뒤 수리 후 정보를 입력해주세요.</Text>
+                  </View>
+              )}
 
               <TextInput
                   value={draft.repairDate}
@@ -662,27 +745,21 @@ export default function ReportDetail() {
               />
 
               {draft.repairMethod === "DIY" ? (
-                  <View style={{ gap: 10 }}>
+                  <View style={styles.methodBox}>
                     <TextInput value={draft.diyMaterialsUsed} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialsUsed: text }))} placeholder="사용한 자재" style={styles.input} placeholderTextColor="#94a3b8" />
-                    <TextInput value={draft.diyMaterialCost || (draft as any).materialCost} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialCost: text, materialCost: text } as any))} placeholder="자재비" keyboardType="number-pad" style={styles.input} placeholderTextColor="#94a3b8" />
+                    <TextInput value={draft.diyMaterialCost || (draft as any).materialCost} onChangeText={(text) => setDraft((p) => ({ ...p, diyMaterialCost: text, materialCost: text } as ReportDraft))} placeholder="자재비" keyboardType="number-pad" style={styles.input} placeholderTextColor="#94a3b8" />
                     <TextInput value={draft.diyWorkMemo} multiline onChangeText={(text) => setDraft((p) => ({ ...p, diyWorkMemo: text }))} placeholder="직접 수리 메모" style={styles.textArea} placeholderTextColor="#94a3b8" />
-                    <TextInput
-                        value={getDraftText(draft, "diyRepairSummary")}
-                        multiline
-                        onChangeText={(text) => setDraft((p) => ({ ...p, diyRepairSummary: text } as any))}
-                        placeholder="실제 작업 요약"
-                        style={styles.textArea}
-                        placeholderTextColor="#94a3b8"
-                    />
+                    <TextInput value={draft.repairSummary} multiline onChangeText={(text) => setDraft((p) => ({ ...p, repairSummary: text }))} placeholder="실제 작업 요약" style={styles.textArea} placeholderTextColor="#94a3b8" />
                   </View>
-              ) : (
-                  <View style={{ gap: 10 }}>
+              ) : draft.repairMethod === "PRO" ? (
+                  <View style={styles.methodBox}>
                     <TextInput value={draft.contractorName} onChangeText={(text) => setDraft((p) => ({ ...p, contractorName: text }))} placeholder="업체명" style={styles.input} placeholderTextColor="#94a3b8" />
                     <TextInput value={draft.contractorContact} onChangeText={(text) => setDraft((p) => ({ ...p, contractorContact: text }))} placeholder="업체 연락처" style={styles.input} placeholderTextColor="#94a3b8" />
                     <TextInput value={draft.totalCost} onChangeText={(t) => setDraft(p => ({ ...p, totalCost: t }))} placeholder="총 비용" keyboardType="number-pad" style={[styles.input, { color: MAIN_BLUE, fontWeight: '700' }]} placeholderTextColor="#94a3b8" />
                     <TextInput value={draft.repairSummary} multiline onChangeText={(text) => setDraft((p) => ({ ...p, repairSummary: text }))} placeholder="실제 작업 요약" style={styles.textArea} placeholderTextColor="#94a3b8" />
                   </View>
-              )}
+              ) : null}
+
               <TextInput value={draft.notes} multiline onChangeText={(text) => setDraft((p) => ({ ...p, notes: text }))} placeholder="사용자 메모" style={[styles.textArea, { marginTop: 10 }]} placeholderTextColor="#94a3b8" />
 
               <View style={[styles.imageSection, { marginTop: 14 }]}>
@@ -744,7 +821,7 @@ export default function ReportDetail() {
               </View>
 
               <Pressable onPress={handleSaveDraft} disabled={savingDraft} style={[styles.saveButton, savingDraft && { opacity: 0.6 }]}>
-                {savingDraft ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>후입력 정보 임시 저장</Text>}
+                {savingDraft ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>입력 정보 임시 저장</Text>}
               </Pressable>
             </View>
 
@@ -765,6 +842,7 @@ export default function ReportDetail() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#fff" },
+  keyboardAvoidingView: { flex: 1, backgroundColor: "#fff" },
   container: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 100 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 12 },
   backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f1f5f9' },
@@ -773,7 +851,6 @@ const styles = StyleSheet.create({
   card: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 6 },
   cardTitle: { fontSize: 16, fontWeight: "800", color: "#334155" },
-  requiredGuideText: { fontSize: 13, color: "#64748b", lineHeight: 19, marginTop: -4, marginBottom: 14 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
   infoLabel: { fontSize: 14, color: "#94a3b8", fontWeight: "600" },
   infoValue: { fontSize: 14, color: "#1e293b", fontWeight: "700", flex: 1, textAlign: "right" },
@@ -785,6 +862,18 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: MAIN_BLUE },
   tabText: { fontSize: 14, fontWeight: "700", color: "#64748b" },
   tabTextActive: { color: "#fff" },
+  methodBox: { gap: 10 },
+  noticeBox: {
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 2,
+  },
+  noticeText: { flex: 1, fontSize: 13, lineHeight: 19, color: "#2563eb", fontWeight: "700" },
   input: { height: 52, backgroundColor: "#f8fafc", borderRadius: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: "#e2e8f0", fontSize: 14, color: "#1e293b", marginBottom: 10 },
   textArea: { minHeight: 100, backgroundColor: "#f8fafc", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#e2e8f0", fontSize: 14, textAlignVertical: 'top', color: "#1e293b" },
   imageSection: { marginTop: 14, gap: 10 },
