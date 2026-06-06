@@ -14,11 +14,25 @@ import { requestCurrentCoordinates, type Coordinates } from "../src/utils/locati
 
 const MAIN_BLUE = "#3b82f6";
 
-function issueTypeLabel(t: IssueType) {
+function issueTypeLabel(t?: string | null) {
+  const value = String(t ?? "").trim().toUpperCase();
   const labels: Record<string, string> = {
-    CRACK: "균열", LEAK: "누수", MOLD: "곰팡이", DAMAGE: "파손", ELECTRIC: "전기", GAS: "가스"
+    CRACK: "균열",
+    LEAK: "누수",
+    MOLD: "곰팡이",
+    PEEL: "박리",
+    PAINT_PEEL: "박리",
+    CORROSION: "부식",
+    BULGE: "들뜸",
   };
-  return labels[t] || "기타";
+  return labels[value] || "기타";
+}
+
+function toNumberOrUndefined(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const text = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 /**
@@ -27,15 +41,17 @@ function issueTypeLabel(t: IssueType) {
  *  - "업체" 접미사는 카카오에서 일반적인 상호/카테고리명과 겹쳐서 효과가 낮음. 대신 구체 업무명 사용.
  */
 function issueTypeSearchKeyword(t: IssueType): string {
+  const value = String(t ?? "").trim().toUpperCase();
   const map: Record<string, string> = {
     LEAK: "누수수리",
     MOLD: "곰팡이제거",
-    CRACK: "외벽보수",
-    DAMAGE: "리모델링",
-    ELECTRIC: "전기공사",
-    GAS: "도시가스",
+    CRACK: "균열보수",
+    PEEL: "페인트박리보수",
+    PAINT_PEEL: "페인트박리보수",
+    CORROSION: "부식보수",
+    BULGE: "타일들뜸보수",
   };
-  return map[t] ?? "집수리";
+  return map[value] ?? "집수리";
 }
 
 function formatPrice(price: number, maxPrice?: number) {
@@ -172,7 +188,7 @@ function sortPartnerFirstByName(vendors: ExpertVendor[]) {
 }
 
 export default function Expert() {
-  const { historyId, issueType } = useLocalSearchParams<{ historyId?: string; issueType?: string }>();
+  const { historyId, issueType, riskScore, areaRatio } = useLocalSearchParams<{ historyId?: string; issueType?: string; riskScore?: string; areaRatio?: string }>();
 
   // --- [원본 상태 관리 로직] ---
   const [loading, setLoading] = useState(true);
@@ -180,6 +196,8 @@ export default function Expert() {
   const [info, setInfo] = useState<ExpertInfo | null>(null);
   const [vendors, setVendors] = useState<ExpertVendor[]>([]);
   const [resolvedIssueType, setResolvedIssueType] = useState<IssueType>("MOLD");
+  const [resolvedRiskScore, setResolvedRiskScore] = useState<number | undefined>(undefined);
+  const [resolvedAreaRatio, setResolvedAreaRatio] = useState<number | undefined>(undefined);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<ExpertVendorSort>("distance");
   const [sortAscending, setSortAscending] = useState(true);
@@ -196,28 +214,38 @@ export default function Expert() {
       try {
         setLoading(true);
         let t: IssueType = (issueType as IssueType) || "MOLD";
-        if (historyId && !issueType) {
-          // issueType이 없을 때만 히스토리 API 호출 시도
+        let score = toNumberOrUndefined(riskScore);
+        let area = toNumberOrUndefined(areaRatio);
+
+        if (historyId) {
           try {
             const h = await getHistoryDetail(String(historyId));
-            t = h.issueType;
+            t = (h.issueType || t) as IssueType;
+            score = h.riskScore ?? score;
+            area = h.areaRatio ?? area;
           } catch {
             // diagnosisId를 historyId로 넘긴 경우 등 API 실패 시 기본값 유지
           }
         }
-        const i = await getExpertInfo(t);
+
+        const i = await getExpertInfo(t, score, area);
         setResolvedIssueType(t);
+        setResolvedRiskScore(score);
+        setResolvedAreaRatio(area);
         setInfo(i);
       } catch {
         // getExpertInfo는 하드코딩이라 실패 없지만 안전망
-        const i = await getExpertInfo("MOLD");
+        const i = await getExpertInfo("MOLD", undefined, undefined);
+        setResolvedIssueType("MOLD");
+        setResolvedRiskScore(undefined);
+        setResolvedAreaRatio(undefined);
         setInfo(i);
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [historyId, issueType]);
+  }, [historyId, issueType, riskScore, areaRatio]);
 
   // userCoordinates 상태 변경 시 ref 동기화
   useEffect(() => {
@@ -654,6 +682,8 @@ export default function Expert() {
                                       vendorIntro: vendor.intro,
                                       vendorMinPrice: String(vendor.minPrice),
                                       issueType: resolvedIssueType,
+                                      riskScore: resolvedRiskScore != null ? String(resolvedRiskScore) : undefined,
+                                      areaRatio: resolvedAreaRatio != null ? String(resolvedAreaRatio) : undefined,
                                     },
                                   })}
                                   style={styles.bookBtn}

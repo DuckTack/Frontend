@@ -127,33 +127,201 @@ export async function getDiyGuide(issueType: IssueType): Promise<DiyGuide> {
   };
 }
 
-export async function getExpertInfo(issueType: IssueType): Promise<ExpertInfo> {
-  if (issueType === "MOLD") {
-    return {
-      estimateRange: "약 8만 ~ 25만원(상황에 따라 변동)",
-      vendors: ["근처 방수/곰팡이 전문 A", "클리닝 업체 B", "설비 기사 C"],
-      notes: ["면적/재발 여부에 따라 비용 변동", "재도장 포함 여부 확인"],
-      whyPro: [
-        "결로/누수 등 근본 원인이 있으면 DIY로 재발 가능성이 큼",
-        "곰팡이가 깊게 침투했으면 벽지/도장/단열 보수가 필요할 수 있음",
-        "호흡기 질환/알레르기 있으면 전문 처리 권장",
-      ],
-    };
+type RiskBand = "LOW" | "MEDIUM" | "HIGH";
+type EstimateIssueType = "CRACK" | "LEAK" | "MOLD" | "PEEL" | "CORROSION" | "BULGE";
+
+type PriceRange = [number, number];
+
+const PRICE_TABLE: Record<EstimateIssueType, Record<RiskBand, PriceRange>> = {
+  MOLD: {
+    LOW: [50_000, 120_000],
+    MEDIUM: [120_000, 250_000],
+    HIGH: [250_000, 450_000],
+  },
+  LEAK: {
+    LOW: [120_000, 250_000],
+    MEDIUM: [250_000, 500_000],
+    HIGH: [500_000, 900_000],
+  },
+  CRACK: {
+    LOW: [70_000, 180_000],
+    MEDIUM: [180_000, 400_000],
+    HIGH: [400_000, 750_000],
+  },
+  PEEL: {
+    LOW: [50_000, 120_000],
+    MEDIUM: [120_000, 250_000],
+    HIGH: [250_000, 450_000],
+  },
+  CORROSION: {
+    LOW: [80_000, 180_000],
+    MEDIUM: [180_000, 400_000],
+    HIGH: [400_000, 700_000],
+  },
+  BULGE: {
+    LOW: [70_000, 180_000],
+    MEDIUM: [180_000, 350_000],
+    HIGH: [350_000, 650_000],
+  },
+};
+
+const ISSUE_LABELS: Record<EstimateIssueType, string> = {
+  CRACK: "균열",
+  LEAK: "누수",
+  MOLD: "곰팡이",
+  PEEL: "박리",
+  CORROSION: "부식",
+  BULGE: "들뜸",
+};
+
+const VENDOR_HINTS: Record<EstimateIssueType, string[]> = {
+  CRACK: ["균열 보수 업체", "외벽/내벽 보수 업체", "미장·보강 시공 업체"],
+  LEAK: ["누수 탐지 업체", "배관 수리 업체", "방수 시공 업체"],
+  MOLD: ["곰팡이 제거 업체", "방습/단열 보수 업체", "클리닝 전문 업체"],
+  PEEL: ["도장 보수 업체", "벽지/마감재 보수 업체", "페인트 시공 업체"],
+  CORROSION: ["금속 부식 보수 업체", "창틀/샷시 보수 업체", "방청 도장 업체"],
+  BULGE: ["타일 보수 업체", "마감재 재시공 업체", "바닥/벽면 보수 업체"],
+};
+
+const WHY_PRO: Record<EstimateIssueType, string[]> = {
+  CRACK: [
+    "균열은 표면 문제인지 구조적 문제인지 사진만으로 단정하기 어렵습니다.",
+    "균열 폭이 커지거나 반복 발생하면 보강 시공이 필요할 수 있습니다.",
+    "누수·침하 등 2차 원인이 함께 있으면 전문가 확인이 안전합니다.",
+  ],
+  LEAK: [
+    "누수는 원인 위치와 실제 물길을 찾지 못하면 재발하기 쉽습니다.",
+    "전기 설비, 곰팡이, 마감재 손상으로 2차 피해가 커질 수 있습니다.",
+    "임대인/세입자 책임 판단에는 현장 확인 기록이 유리합니다.",
+  ],
+  MOLD: [
+    "곰팡이는 결로·누수·환기 문제 등 근본 원인이 남아 있으면 재발할 수 있습니다.",
+    "벽지나 도장 내부까지 침투한 경우 단순 세척으로 해결되지 않을 수 있습니다.",
+    "호흡기 질환이나 알레르기가 있으면 전문 처리를 권장합니다.",
+  ],
+  PEEL: [
+    "박리는 표면 도장 문제뿐 아니라 습기·누수·접착 불량이 원인일 수 있습니다.",
+    "넓은 범위로 진행되면 부분 보수보다 재도장이나 재시공이 필요할 수 있습니다.",
+    "기존 마감재 제거와 바탕면 정리가 품질에 큰 영향을 줍니다.",
+  ],
+  CORROSION: [
+    "부식은 표면 녹 제거만으로 끝나지 않고 방청 처리와 재도장이 필요할 수 있습니다.",
+    "창틀·배관·금속 부재의 부식은 누수나 안전 문제로 이어질 수 있습니다.",
+    "부식 범위가 넓거나 깊으면 교체 여부를 전문가가 판단해야 합니다.",
+  ],
+  BULGE: [
+    "들뜸은 접착 불량, 습기, 바탕면 문제 등 원인이 다양합니다.",
+    "타일이나 마감재가 탈락할 위험이 있으면 즉시 보수가 필요합니다.",
+    "재시공 범위 판단이 필요해 전문가 확인이 안전합니다.",
+  ],
+};
+
+function normalizeEstimateIssueType(issueType: IssueType): EstimateIssueType | null {
+  const value = String(issueType ?? "").trim().toUpperCase();
+  if (value === "PAINT_PEEL") return "PEEL";
+  if (["CRACK", "LEAK", "MOLD", "PEEL", "CORROSION", "BULGE"].includes(value)) {
+    return value as EstimateIssueType;
   }
-  if (issueType === "LEAK") {
-    return {
-      estimateRange: "약 10만 ~ 40만원(누수 위치/원인에 따라 변동)",
-      vendors: ["설비 기사 A", "누수탐지 업체 B", "배관 수리 C"],
-      notes: ["탐지비/수리비 분리 청구 여부 확인"],
-      whyPro: [
-        "누수는 원인/경로를 찾지 못하면 재발하기 쉬움",
-        "전기/곰팡이/마감재 손상으로 2차 피해가 커질 수 있음",
-        "임대인/세입자 책임 판단에 증빙이 유리",
-      ],
-    };
-  }
+  return null;
+}
+
+function getRiskBand(riskScore?: number | null): RiskBand {
+  const score = Number(riskScore ?? 0);
+  if (Number.isFinite(score) && score >= 70) return "HIGH";
+  if (Number.isFinite(score) && score >= 40) return "MEDIUM";
+  return "LOW";
+}
+
+function normalizeAreaRatio(areaRatio?: number | null): number | null {
+  if (areaRatio === null || areaRatio === undefined) return null;
+  const value = Number(areaRatio);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value > 1 ? value / 100 : value;
+}
+
+function getAreaFactor(areaRatio?: number | null): number {
+  const ratio = normalizeAreaRatio(areaRatio);
+  if (ratio === null) return 1.0;
+  if (ratio >= 0.30) return 1.20;
+  if (ratio >= 0.15) return 1.10;
+  if (ratio >= 0.05) return 1.00;
+  return 0.90;
+}
+
+function areaBandLabel(areaRatio?: number | null): string {
+  const ratio = normalizeAreaRatio(areaRatio);
+  if (ratio === null) return "면적 정보 없음";
+  if (ratio >= 0.30) return "매우 큼";
+  if (ratio >= 0.15) return "큼";
+  if (ratio >= 0.05) return "보통";
+  return "작음";
+}
+
+function roundToManwon(value: number): number {
+  return Math.max(10_000, Math.round(value / 10_000) * 10_000);
+}
+
+function formatManwon(value: number): string {
+  return `${Math.round(value / 10_000).toLocaleString("ko-KR")}만원`;
+}
+
+function estimateRepairPrice(issueType: EstimateIssueType, riskScore?: number | null, areaRatio?: number | null) {
+  const riskBand = getRiskBand(riskScore);
+  const [baseMin, baseMax] = PRICE_TABLE[issueType][riskBand];
+  const areaFactor = getAreaFactor(areaRatio);
+
+  const minPrice = roundToManwon(baseMin * areaFactor);
+  const maxPrice = roundToManwon(baseMax * areaFactor);
+
   return {
-    estimateRange: "상황에 따라 변동",
-    vendors: ["가까운 수리 업체 A", "생활 수리 B"],
+    issueLabel: ISSUE_LABELS[issueType],
+    riskBand,
+    areaFactor,
+    areaLabel: areaBandLabel(areaRatio),
+    minPrice,
+    maxPrice,
+    label: `약 ${formatManwon(minPrice)} ~ ${formatManwon(maxPrice)}`,
+  };
+}
+
+function riskBandLabel(riskBand: RiskBand): string {
+  if (riskBand === "HIGH") return "높음";
+  if (riskBand === "MEDIUM") return "보통";
+  return "낮음";
+}
+
+export async function getExpertInfo(
+    issueType: IssueType,
+    riskScore?: number | null,
+    areaRatio?: number | null,
+): Promise<ExpertInfo> {
+  const normalizedIssueType = normalizeEstimateIssueType(issueType);
+
+  if (!normalizedIssueType) {
+    return {
+      estimateRange: "상황에 따라 변동",
+      vendors: ["가까운 수리 업체", "생활 수리 업체"],
+      notes: [
+        "현재 유형은 기준 가격표가 없어 참고용 비용 범위를 산정하지 않습니다.",
+        "실제 견적은 현장 상태와 업체 확인에 따라 달라질 수 있습니다.",
+      ],
+    };
+  }
+
+  const estimate = estimateRepairPrice(normalizedIssueType, riskScore, areaRatio);
+  const ratio = normalizeAreaRatio(areaRatio);
+  const areaText = ratio === null ? "면적 정보 없음" : `${Math.round(ratio * 100)}% 내외`;
+
+  return {
+    estimateRange: estimate.label,
+    vendors: VENDOR_HINTS[normalizedIssueType],
+    notes: [
+      `하자 유형: ${estimate.issueLabel}`,
+      `위험도 구간: ${riskBandLabel(estimate.riskBand)}${riskScore !== null && riskScore !== undefined ? `(${Math.round(Number(riskScore))}점)` : ""}`,
+      `SAM 손상 면적 비율: ${areaText} · 면적 보정: ${estimate.areaLabel}(${estimate.areaFactor.toFixed(1)}배)`,
+      "AI가 감지한 하자 유형, 손상 면적, 위험도 점수를 기반으로 산정한 참고용 예상 비용입니다.",
+      "실제 견적은 현장 상태와 업체 확인에 따라 달라질 수 있습니다.",
+    ],
+    whyPro: WHY_PRO[normalizedIssueType],
   };
 }

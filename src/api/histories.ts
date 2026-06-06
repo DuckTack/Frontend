@@ -1,17 +1,17 @@
 import { apiClient } from "./apiClient";
 
 export type IssueType =
-  | "CRACK"
-  | "LEAK"
-  | "MOLD"
-  | "PEEL"
-  | "PAINT_PEEL"
-  | "CORROSION"
-  | "BULGE"
-  | "DAMAGE"
-  | "ELECTRIC"
-  | "GAS"
-  | "ETC";
+    | "CRACK"
+    | "LEAK"
+    | "MOLD"
+    | "PEEL"
+    | "PAINT_PEEL"
+    | "CORROSION"
+    | "BULGE"
+    | "DAMAGE"
+    | "ELECTRIC"
+    | "GAS"
+    | "ETC";
 export type DiagnosisStatus = "ANALYZING" | "COMPLETED" | "FAILED";
 export type Recommendation = "DIY" | "PRO";
 
@@ -22,6 +22,7 @@ export type HistorySummary = {
   status: DiagnosisStatus;
   riskScore: number;
   issueType: IssueType;
+  areaRatio?: number;
   createdAt: string;
   recommendation: Recommendation;
   imageUris?: string[];
@@ -88,20 +89,20 @@ function pickImageUris(raw: any): string[] {
   // 단수 imageUrl (새 파이프라인 DiagnosisResult.imageUrl) 처리
   if (raw?.imageUrl && typeof raw.imageUrl === "string") return [normalizeUrl(raw.imageUrl)];
   const direct = stringList(raw?.imageUris ?? raw?.imageUrls ?? raw?.diagnosisImageUrls ?? raw?.beforeImageUrls ?? raw?.diagnosis?.beforeImageUrls)
-    .map(normalizeUrl);
+      .map(normalizeUrl);
   if (direct.length > 0) return direct;
 
   const imageObjects = Array.isArray(raw?.images)
-    ? raw.images
-    : Array.isArray(raw?.diagnosisImages)
-      ? raw.diagnosisImages
-      : [];
+      ? raw.images
+      : Array.isArray(raw?.diagnosisImages)
+          ? raw.diagnosisImages
+          : [];
 
   return imageObjects
-    .map((img: any) => img?.url ?? img?.imageUrl ?? img?.fileUrl ?? img?.uri)
-    .map((uri: any) => String(uri ?? ""))
-    .filter(Boolean)
-    .map(normalizeUrl);
+      .map((img: any) => img?.url ?? img?.imageUrl ?? img?.fileUrl ?? img?.uri)
+      .map((uri: any) => String(uri ?? ""))
+      .filter(Boolean)
+      .map(normalizeUrl);
 }
 
 function pickImageKeys(raw: any): string[] {
@@ -109,15 +110,15 @@ function pickImageKeys(raw: any): string[] {
   if (direct.length > 0) return direct;
 
   const imageObjects = Array.isArray(raw?.images)
-    ? raw.images
-    : Array.isArray(raw?.diagnosisImages)
-      ? raw.diagnosisImages
-      : [];
+      ? raw.images
+      : Array.isArray(raw?.diagnosisImages)
+          ? raw.diagnosisImages
+          : [];
 
   return imageObjects
-    .map((img: any) => img?.storageKey ?? img?.fileKey ?? img?.key)
-    .map((key: any) => String(key ?? ""))
-    .filter(Boolean);
+      .map((img: any) => img?.storageKey ?? img?.fileKey ?? img?.key)
+      .map((key: any) => String(key ?? ""))
+      .filter(Boolean);
 }
 
 function normalizeHistoryItem(raw: any): HistorySummary {
@@ -130,6 +131,7 @@ function normalizeHistoryItem(raw: any): HistorySummary {
     status: (raw?.status ?? "ANALYZING") as DiagnosisStatus,
     riskScore,
     issueType: (raw?.issueType ?? "ETC") as IssueType,
+    areaRatio: toNumberOrUndefined(raw?.areaRatio ?? raw?.maxAreaRatio ?? raw?.mainAreaRatio),
     createdAt: raw?.createdAt ?? new Date().toISOString(),
     recommendation: (raw?.recommendation as Recommendation) ?? toRecommendation(riskScore),
     reservationId: raw?.reservationId ? String(raw.reservationId) : undefined,
@@ -153,14 +155,14 @@ function normalizeHistoryItem(raw: any): HistorySummary {
     kakaoPlaceId: raw?.kakaoPlaceId ? String(raw.kakaoPlaceId) : undefined,
     kakaoPlaceName: raw?.kakaoPlaceName ? String(raw.kakaoPlaceName) : raw?.expertVendorName ? String(raw.expertVendorName) : raw?.vendorName ? String(raw.vendorName) : undefined,
     kakaoPlacePhone: raw?.kakaoPlacePhone
-      ? String(raw.kakaoPlacePhone)
-      : raw?.expertVendorPhone
-        ? String(raw.expertVendorPhone)
-        : raw?.companyPhone
-          ? String(raw.companyPhone)
-          : raw?.vendorPhone
-            ? String(raw.vendorPhone)
-            : undefined,
+        ? String(raw.kakaoPlacePhone)
+        : raw?.expertVendorPhone
+            ? String(raw.expertVendorPhone)
+            : raw?.companyPhone
+                ? String(raw.companyPhone)
+                : raw?.vendorPhone
+                    ? String(raw.vendorPhone)
+                    : undefined,
     kakaoPlaceAddress: raw?.kakaoPlaceAddress ? String(raw.kakaoPlaceAddress) : raw?.vendorAddress ? String(raw.vendorAddress) : undefined,
     kakaoPlaceLat: toNumberOrUndefined(raw?.kakaoPlaceLat ?? raw?.vendorLatitude),
     kakaoPlaceLng: toNumberOrUndefined(raw?.kakaoPlaceLng ?? raw?.vendorLongitude),

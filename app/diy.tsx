@@ -453,7 +453,7 @@ export default function Diy() {
                 <View style={styles.warningBanner}>
                   <Feather name="alert-triangle" size={16} color="#b45309" />
                   <Text style={styles.warningBannerText}>
-                    위험도가 높습니다. 전문가 상담을 권장하지만, 참고용으로 DIY 방법을 안내합니다.
+                    위험도가 높습니다. 전문가 상담을 권장하지만,{"\n"}참고용으로 DIY 방법을 안내합니다.
                   </Text>
                 </View>
             )}

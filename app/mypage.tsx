@@ -50,20 +50,23 @@ function rentLabel(t: RentType) {
   }
 }
 
-function issueLabel(t: MyReportItem["issueType"]) {
-  switch (t) {
+function issueLabel(t?: MyReportItem["issueType"] | string | null) {
+  const value = String(t ?? "").trim().toUpperCase();
+
+  switch (value) {
     case "CRACK":
       return "균열";
     case "LEAK":
       return "누수";
     case "MOLD":
       return "곰팡이";
-    case "DAMAGE":
-      return "파손";
-    case "ELECTRIC":
-      return "전기";
-    case "GAS":
-      return "가스";
+    case "PEEL":
+    case "PAINT_PEEL":
+      return "박리";
+    case "CORROSION":
+      return "부식";
+    case "BULGE":
+      return "들뜸";
     default:
       return "기타";
   }
