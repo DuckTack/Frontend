@@ -12,6 +12,17 @@ import {
   Platform,
 } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+const C = {
+  primary:   "#4F46E5",
+  primaryBg: "#EDEDFF",
+  primaryDim: "#A5B4FC",
+  text:      "#0F172A",
+  sub:       "#64748B",
+  border:    "#E2E8F0",
+  inputBg:   "#F8FAFC",
+};
 import { Ionicons } from "@expo/vector-icons";
 
 import {
@@ -25,7 +36,7 @@ import {
   type RentType,
 } from "../src/api/auth";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = C.primary;
 
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 72;
@@ -616,6 +627,19 @@ export default function Signup() {
                 </Pressable>
               </View>
 
+              {emailChecked !== null && !emailVerified && (
+                  <Text
+                      style={[
+                        styles.statusText,
+                        { color: emailChecked ? "#10b981" : "#ef4444", marginTop: 6 },
+                      ]}
+                  >
+                    {emailChecked
+                        ? "✓ 사용 가능한 이메일입니다."
+                        : "✕ 이미 사용 중이거나 사용할 수 없는 이메일입니다."}
+                  </Text>
+              )}
+
               <Text
                   style={[
                     styles.helperText,
@@ -689,19 +713,6 @@ export default function Signup() {
                   )}
                 </Pressable>
               </View>
-
-              {emailChecked !== null && !emailVerified && (
-                  <Text
-                      style={[
-                        styles.statusText,
-                        { color: emailChecked ? "#10b981" : "#ef4444" },
-                      ]}
-                  >
-                    {emailChecked
-                        ? "✓ 사용 가능한 이메일입니다."
-                        : "✕ 이미 사용 중이거나 사용할 수 없는 이메일입니다."}
-                  </Text>
-              )}
 
               {emailVerified && (
                   <Text style={[styles.statusText, { color: "#10b981" }]}>
@@ -883,9 +894,9 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24,
-    paddingTop: 0,
+    paddingTop: 20,
     paddingBottom: 24,
-    backgroundColor: "#f8faff",
+    backgroundColor: "#F8FAFC",
   },
 
   headerTopRow: {
@@ -966,7 +977,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     height: 56,
     minWidth: 92,
-    backgroundColor: "#eff6ff",
+    backgroundColor: C.primaryBg,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -1069,8 +1080,8 @@ const styles = StyleSheet.create({
   },
 
   chipActive: {
-    backgroundColor: MAIN_BLUE,
-    borderColor: MAIN_BLUE,
+    backgroundColor: C.primary,
+    borderColor: C.primary,
   },
 
   chipText: {
@@ -1090,7 +1101,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 20,
+
     shadowColor: MAIN_BLUE,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 4,

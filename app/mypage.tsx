@@ -7,18 +7,18 @@ import {
   TextInput,
   View,
   StyleSheet,
-  SafeAreaView,
   Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 import { Ionicons, Feather } from "@expo/vector-icons";
 
 import ScreenState from "../src/components/ScreenState";
 import { clearAccessToken } from "../src/store/tokenStorage";
-import { deleteReport, openReportPdf, listMyReports, MyReportItem } from "../src/api/reports";
+import { openReportPdf, listMyReports, MyReportItem } from "../src/api/reports";
 import { getMe, updateMe, Me, ResidenceType, RentType } from "../src/api/users";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 
 function residenceLabel(t: ResidenceType) {
   switch (t) {
@@ -221,41 +221,6 @@ export default function MyPage() {
     }
   }
 
-  async function handleDelete(report: MyReportItem) {
-    const diagnosisId = (report as any).diagnosisId;
-
-    if (diagnosisId === null || diagnosisId === undefined || diagnosisId === "") {
-      Alert.alert("삭제 불가", "삭제에 필요한 진단 ID가 없습니다.");
-      return;
-    }
-
-    Alert.alert(
-        "리포트 삭제",
-        "이 리포트 후입력 정보와 생성된 PDF 정보를 삭제합니다. 진단 이력 자체는 삭제되지 않습니다.",
-        [
-          { text: "취소", style: "cancel" },
-          {
-            text: "삭제",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                await deleteReport(diagnosisId);
-                setReports((prev) =>
-                    prev.filter(
-                        (item) => String((item as any).diagnosisId) !== String(diagnosisId)
-                    )
-                );
-                Alert.alert("삭제 완료");
-              } catch (e) {
-                console.log("리포트 삭제 실패:", e);
-                Alert.alert("삭제 실패", "잠시 후 다시 시도해주세요.");
-              }
-            },
-          },
-        ]
-    );
-  }
-
   async function handleSaveProfile() {
     try {
       const updated = await updateMe({
@@ -275,7 +240,7 @@ export default function MyPage() {
   if (loading) return <ScreenState loading />;
 
   return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
         <Stack.Screen options={{ headerShown: false }} />
 
         <View style={styles.header}>
@@ -468,14 +433,6 @@ export default function MyPage() {
                               다운로드
                             </Text>
                           </Pressable>
-
-                          <Pressable
-                              onPress={() => handleDelete(r)}
-                              style={styles.deleteBtn}
-                          >
-                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                            <Text style={styles.deleteBtnText}>삭제</Text>
-                          </Pressable>
                         </View>
 
                       </View>
@@ -543,11 +500,11 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 22,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#EDEDFF",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#dbeafe",
+    borderColor: "#C7D2FE",
   },
   userName: { fontSize: 20, fontWeight: "800", color: "#1e293b" },
   userPhone: { fontSize: 13, color: "#64748b", marginTop: 1 },
@@ -683,20 +640,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   downBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-
-  deleteBtn: {
-    width: 72,
-    backgroundColor: "#fff1f2",
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 4,
-    borderWidth: 1,
-    borderColor: "#fecdd3",
-  },
-  deleteBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 13 },
 
   detailBtn: {
     height: 48,

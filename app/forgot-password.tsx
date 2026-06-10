@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 // [원본 API 유지]
 import { resetPassword, sendPasswordResetCode, verifyPasswordResetCode } from "../src/api/auth";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 
 export default function ForgotPasswordPage() {
   const [username, setUsername] = useState("");

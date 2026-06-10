@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "하자 진단을 위해 사진 보관함 접근 권한이 필요합니다.",
+        "NSCameraUsageDescription": "하자 사진 촬영을 위해 카메라 접근 권한이 필요합니다."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +31,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "하자 진단을 위해 사진 보관함 접근 권한이 필요합니다.",
+          "cameraPermission": "하자 사진 촬영을 위해 카메라 접근 권한이 필요합니다.",
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-location",
         {

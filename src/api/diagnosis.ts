@@ -123,7 +123,7 @@ export async function startDiagnosis(preferDiy = false): Promise<{
 
   const res = await apiClient.post(url, formData, {
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 90000,
+    timeout: 180000,
   });
 
   const data: DiagnosisApiResult = res.data?.data ?? res.data;

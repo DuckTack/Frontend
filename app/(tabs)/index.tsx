@@ -186,7 +186,7 @@ const SERVICE_CARDS = [
     title: "AI 진단",
     desc: "사진 한 장으로 주거 하자의\n상태와 위험도를\n빠르게 파악합니다.",
     bg: "#eff6ff",
-    accent: "#3b82f6",
+    accent: "#4F46E5",
   },
   {
     id: 2,
@@ -222,24 +222,24 @@ const tileStyles = Array.from({ length: TOTAL_CELLS }, (_, index) => {
   const absoluteY = row * CELL_SIZE;
   const baseNoise = mixedNoise(absoluteX, absoluteY);
   const streakNoise = mixedNoise(absoluteX * 1.4 + 70, absoluteY * 0.8 + 20);
-  const brightness = Math.round(24 + baseNoise * 26 + streakNoise * 10);
-  const red = Math.min(74, brightness + 14);
-  const green = Math.min(60, brightness + 6);
-  const blue = Math.max(16, brightness - 6);
-  const alpha = 0.9 + noise(col + 2.1, row + 6.4) * 0.06;
+  const brightness = Math.round(20 + baseNoise * 26 + streakNoise * 8);
+  const red = Math.min(72, brightness + 6);
+  const green = Math.min(68, brightness + 4);
+  const blue = Math.min(110, brightness + 48);
+  const alpha = 0.91 + noise(col + 2.1, row + 6.4) * 0.06;
 
   return {
     backgroundColor: `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(3)})`,
-    hasDot: noise(col * 4.3 + 1.7, row * 7.1 + 8.2) > 0.66,
-    dotSize: 1.2 + noise(col * 6.1, row * 3.7) * 3.2,
+    hasDot: noise(col * 4.3 + 1.7, row * 7.1 + 8.2) > 0.64,
+    dotSize: 1.0 + noise(col * 6.1, row * 3.7) * 3.0,
     dotLeft: noise(col * 2.2 + 4, row * 1.1 + 2) * Math.max(1, CELL_SIZE - 4),
     dotTop: noise(col * 1.3 + 8, row * 2.4 + 7) * Math.max(1, CELL_SIZE - 4),
-    dotOpacity: 0.14 + noise(col * 3.2 + 1, row * 2.7 + 9) * 0.28,
-    hasStreak: noise(col * 5.9 + 11.4, row * 3.8 + 5.1) > 0.87,
-    streakWidth: CELL_SIZE * (1.2 + noise(col * 1.4 + 5, row * 4.1 + 1) * 1.45),
-    streakHeight: 1.2 + noise(col * 2.6 + 12, row * 1.8 + 3) * 2.0,
+    dotOpacity: 0.16 + noise(col * 3.2 + 1, row * 2.7 + 9) * 0.30,
+    hasStreak: noise(col * 5.9 + 11.4, row * 3.8 + 5.1) > 0.84,
+    streakWidth: CELL_SIZE * (1.3 + noise(col * 1.4 + 5, row * 4.1 + 1) * 1.5),
+    streakHeight: 1.0 + noise(col * 2.6 + 12, row * 1.8 + 3) * 1.8,
     streakRotate: `${-40 + noise(col * 7.5 + 3, row * 1.5 + 10) * 80}deg`,
-    streakOpacity: 0.07 + noise(col * 2.8 + 8, row * 2.2 + 6) * 0.16,
+    streakOpacity: 0.10 + noise(col * 2.8 + 8, row * 2.2 + 6) * 0.20,
   };
 });
 
@@ -660,10 +660,6 @@ export default function HomeTab() {
         {/* ── 먼지 닦기 모달 (보존) ── */}
         <Modal visible={overlayVisible} transparent animationType="none" statusBarTranslucent>
           <View style={styles.overlayContainer} {...panResponder.panHandlers}>
-            <View pointerEvents="none" style={styles.overlayTextWrapper}>
-              <Text style={styles.overlayTitle}>먼지를 닦아{"\n"}시작해보세요</Text>
-            </View>
-
             <View style={styles.gridWrapper} pointerEvents="none">
               {Array.from({ length: TOTAL_CELLS }).map((_, index) =>
                   clearedCellsRef.current.has(index) ? (
@@ -672,6 +668,12 @@ export default function HomeTab() {
                       <DustTile key={index} index={index} />
                   )
               )}
+            </View>
+            <View style={styles.dustGuideBox} pointerEvents="none">
+              <Text style={styles.dustGuideTitle}>먼지를 닦아주세요</Text>
+              <Text style={styles.dustGuideText}>
+                화면을 손가락으로 문질러 하자 진단 화면을 열어주세요.
+              </Text>
             </View>
           </View>
         </Modal>
@@ -746,7 +748,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: "rgba(59, 130, 246, 0.18)",
+    backgroundColor: "rgba(79, 70, 229, 0.22)",
     top: -60,
     right: -50,
   },
@@ -756,25 +758,25 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: "rgba(96, 165, 250, 0.1)",
+    backgroundColor: "rgba(165, 180, 252, 0.12)",
     bottom: -20,
     left: 20,
   },
 
   heroBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(59, 130, 246, 0.25)",
+    backgroundColor: "rgba(79, 70, 229, 0.28)",
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 5,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: "rgba(96, 165, 250, 0.35)",
+    borderColor: "rgba(165, 180, 252, 0.4)",
   },
 
   heroBadgeText: {
     fontSize: 11,
-    color: "#93c5fd",
+    color: "#C7D2FE",
     fontWeight: "800",
     letterSpacing: 0.5,
   },
@@ -797,10 +799,15 @@ const styles = StyleSheet.create({
   },
 
   heroCta: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#4F46E5",
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: "center",
+    shadowColor: "#4F46E5",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 4,
   },
 
   heroCtaText: {
@@ -898,9 +905,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 999,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#EDEDFF",
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: "#C7D2FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -918,7 +925,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 22,
     fontWeight: "900",
-    color: "#3b82f6",
+    color: "#4F46E5",
   },
 
   progressRow: {
@@ -1129,27 +1136,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // ── 먼지 모달 (보존) ──
+  // ── 먼지 모달 ──
   overlayContainer: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-
-  overlayTextWrapper: {
-    position: "absolute",
-    alignSelf: "center",
-    top: SCREEN_HEIGHT * 0.4,
-    zIndex: 10,
-  },
-
-  overlayTitle: {
-    fontSize: 40,
-    fontWeight: "900",
-    color: "#ffffff",
-    textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 15,
   },
 
   gridWrapper: {
@@ -1159,4 +1148,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
   },
+  dustGuideBox: {
+    position: "absolute",
+    left: 24,
+    right: 24,
+    bottom: Platform.OS === "ios" ? 90 : 70,
+    backgroundColor: "rgba(15, 23, 42, 0.82)",
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+
+  dustGuideTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ffffff",
+    marginBottom: 6,
+  },
+
+  dustGuideText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#cbd5e1",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
 });
