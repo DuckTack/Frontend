@@ -1,5 +1,16 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, Image, ScrollView, StyleSheet, Alert, Platform, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Platform,
+  TouchableOpacity,
+  Linking
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { router, Stack } from "expo-router";
@@ -16,8 +27,8 @@ type PickedImage = {
 };
 
 const MAX_IMAGES = 5;
-const MAIN_BLUE = "#3b82f6";
-const BG_BLUE = "#eff6ff";
+const MAIN_BLUE = "#4F46E5";
+const BG_BLUE = "#EDEDFF";
 
 export default function Upload() {
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -38,43 +49,135 @@ export default function Upload() {
   function removeImage(uri: string) {
     setImages((prev) => prev.filter((img) => img.uri !== uri));
   }
-
   async function pickFromLibrary() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      showAlert("권한 필요", "사진 접근 권한을 허용해주세요.");
-      return;
-    }
     const remaining = MAX_IMAGES - images.length;
+
     if (remaining <= 0) {
       showAlert("제한 초과", `사진은 최대 ${MAX_IMAGES}장까지 선택할 수 있습니다.`);
       return;
     }
+
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+
+    if (!current.granted) {
+      if (current.canAskAgain === false) {
+        Alert.alert(
+            "사진 접근 권한 필요",
+            "사진 보관함 접근 권한이 차단되어 있습니다.\n\n설정에서 Expo Go의 사진 권한을 허용한 뒤 다시 실행해주세요.",
+            [{ text: "확인" }]
+        );
+        return;
+      }
+
+      Alert.alert(
+          "사진 접근 권한 필요",
+          "하자 사진을 선택하려면 사진 보관함 접근 권한이 필요합니다.",
+          [
+            { text: "취소", style: "cancel" },
+            {
+              text: "허용",
+              onPress: async () => {
+                const requested = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+                if (!requested.granted) {
+                  Alert.alert(
+                      "권한 거부됨",
+                      "사진 접근 권한이 허용되지 않아 사진을 선택할 수 없습니다."
+                  );
+                  return;
+                }
+
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsMultipleSelection: true,
+                  selectionLimit: remaining,
+                  quality: 1,
+                });
+
+                if (result.canceled) return;
+
+                const picked = result.assets.map((a) => ({ uri: a.uri }));
+                setImages((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
+              },
+            },
+          ]
+      );
+
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       selectionLimit: remaining,
       quality: 1,
     });
+
     if (result.canceled) return;
+
     const picked = result.assets.map((a) => ({ uri: a.uri }));
     setImages((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
   }
 
   async function takePhoto() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      showAlert("권한 필요", "카메라 권한을 허용해주세요.");
-      return;
-    }
     if (images.length >= MAX_IMAGES) {
       showAlert("제한 초과", `사진은 최대 ${MAX_IMAGES}장까지 선택할 수 있습니다.`);
       return;
     }
+
+    const current = await ImagePicker.getCameraPermissionsAsync();
+
+    if (!current.granted) {
+      if (current.canAskAgain === false) {
+        Alert.alert(
+            "카메라 권한 필요",
+            "카메라 권한이 차단되어 있습니다.\n\n설정에서 Expo Go의 카메라 권한을 허용한 뒤 다시 실행해주세요.",
+            [{ text: "확인" }]
+        );
+        return;
+      }
+
+      Alert.alert(
+          "카메라 권한 필요",
+          "하자 사진을 촬영하려면 카메라 권한이 필요합니다.",
+          [
+            { text: "취소", style: "cancel" },
+            {
+              text: "허용",
+              onPress: async () => {
+                const requested = await ImagePicker.requestCameraPermissionsAsync();
+
+                if (!requested.granted) {
+                  Alert.alert(
+                      "권한 거부됨",
+                      "카메라 권한이 허용되지 않아 촬영을 진행할 수 없습니다."
+                  );
+                  return;
+                }
+
+                const result = await ImagePicker.launchCameraAsync({ quality: 1 });
+
+                if (result.canceled) return;
+
+                const uri = result.assets[0]?.uri;
+                if (!uri) return;
+
+                setImages((prev) => [...prev, { uri }].slice(0, MAX_IMAGES));
+              },
+            },
+          ]
+      );
+
+      return;
+    }
+
     const result = await ImagePicker.launchCameraAsync({ quality: 1 });
+
     if (result.canceled) return;
+
     const uri = result.assets[0]?.uri;
     if (!uri) return;
+
     setImages((prev) => [...prev, { uri }].slice(0, MAX_IMAGES));
   }
 
@@ -140,8 +243,7 @@ export default function Upload() {
             </View>
             <Text style={styles.miniTipText}>• 진단은 한 번에 한 가지 하자 유형만 가능합니다.</Text>
 
-            <View>
-            </View>
+            <View style={{ height: 16 }} />
 
             {images.length === 0 ? (
                 <View style={styles.dualDropzoneRow}>
@@ -239,7 +341,7 @@ const styles = StyleSheet.create({
   miniTipTitle: { fontSize: 15, fontWeight: "700", color: "#475569", marginBottom: 8 },
   miniTipText: { fontSize: 13, color: "#64748b", lineHeight: 20 },
   disabledBox: { opacity: 0.45 },
-  mainButton: { backgroundColor: MAIN_BLUE, borderRadius: 16, paddingVertical: 18, alignItems: "center", elevation: 2 },
+  mainButton: { backgroundColor: MAIN_BLUE, borderRadius: 18, paddingVertical: 19, alignItems: "center", shadowColor: MAIN_BLUE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 10, elevation: 4 },
   mainButtonDisabled: { backgroundColor: "#cbd5e1" },
   mainButtonText: { color: "white", fontSize: 17, fontWeight: "800" },
 });

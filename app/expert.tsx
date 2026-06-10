@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Platform, Linking } from "react-native";
+import { ScrollView, View, Text, Pressable, Alert, StyleSheet, Linking } from "react-native";
 import { router, useLocalSearchParams, Stack } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather, MaterialCommunityIcons, FontAwesome } from "@expo/vector-icons";
 
-// [원본 로직 및 컴포넌트 유지]
 import ScreenState from "../src/components/ScreenState";
 import { getHistoryDetail, IssueType } from "../src/api/histories";
 import { getExpertInfo, ExpertInfo } from "../src/api/guides";
-import { listExpertVendors, listNearbyCompanies, REGION_COORDS, type ExpertVendor, type ExpertVendorSort, type VendorRegion, VENDOR_REGIONS } from "../src/api/experts";
+import {
+  listExpertVendors,
+  listNearbyCompanies,
+  REGION_COORDS,
+  type ExpertVendor,
+  type ExpertVendorSort,
+  type VendorRegion,
+  VENDOR_REGIONS,
+} from "../src/api/experts";
 import { requestCurrentCoordinates, type Coordinates } from "../src/utils/location";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 
 function issueTypeLabel(t?: string | null) {
   const value = String(t ?? "").trim().toUpperCase();
@@ -35,11 +42,6 @@ function toNumberOrUndefined(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/**
- * 카카오 지역검색 결과가 실제로 풍부하게 나오는 "복합명사" 키워드 매핑.
- *  - 공백이 붙으면 토큰 수가 늘어나 매칭 확률이 급격히 떨어짐 → 붙여쓰기.
- *  - "업체" 접미사는 카카오에서 일반적인 상호/카테고리명과 겹쳐서 효과가 낮음. 대신 구체 업무명 사용.
- */
 function issueTypeSearchKeyword(t: IssueType): string {
   const value = String(t ?? "").trim().toUpperCase();
   const map: Record<string, string> = {
@@ -147,32 +149,61 @@ function withDistanceFromUser(vendors: ExpertVendor[], coords: Coordinates): Exp
   });
 }
 
-function sortPartnerFirstByDistance(vendors: ExpertVendor[]) {
+function getFiniteNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function comparePartnerFirst(a: ExpertVendor, b: ExpertVendor) {
+  return Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
+}
+
+function sortPartnerFirstByDistance(vendors: ExpertVendor[], ascending = true) {
   return [...vendors].sort((a, b) => {
-    const partnerDiff = Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
+    const partnerDiff = comparePartnerFirst(a, b);
     if (partnerDiff !== 0) return partnerDiff;
 
-    const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
-    const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
-    if (da !== db) return da - db;
+    const da = getFiniteNumber(a.distanceKm);
+    const db = getFiniteNumber(b.distanceKm);
+
+    if (da === null && db !== null) return 1;
+    if (da !== null && db === null) return -1;
+
+    if (da !== null && db !== null && da !== db) {
+      return ascending ? da - db : db - da;
+    }
+
+    const ra = getFiniteNumber(a.avgRating) ?? 0;
+    const rb = getFiniteNumber(b.avgRating) ?? 0;
+    if (rb !== ra) return rb - ra;
+
+    const ca = getFiniteNumber(a.reviewCount) ?? 0;
+    const cb = getFiniteNumber(b.reviewCount) ?? 0;
+    if (cb !== ca) return cb - ca;
 
     return String(a.name || "").localeCompare(String(b.name || ""), "ko");
   });
 }
 
-
-function sortPartnerFirstByRating(vendors: ExpertVendor[]) {
+function sortPartnerFirstByRating(vendors: ExpertVendor[], ascending = false) {
   return [...vendors].sort((a, b) => {
-    const partnerDiff = Number(isPartnerVendor(b)) - Number(isPartnerVendor(a));
+    const partnerDiff = comparePartnerFirst(a, b);
     if (partnerDiff !== 0) return partnerDiff;
 
-    const ra = a.avgRating ?? 0;
-    const rb = b.avgRating ?? 0;
-    if (rb !== ra) return rb - ra;
+    const ra = getFiniteNumber(a.avgRating) ?? 0;
+    const rb = getFiniteNumber(b.avgRating) ?? 0;
 
-    const ca = a.reviewCount ?? 0;
-    const cb = b.reviewCount ?? 0;
+    if (ra !== rb) {
+      return ascending ? ra - rb : rb - ra;
+    }
+
+    const ca = getFiniteNumber(a.reviewCount) ?? 0;
+    const cb = getFiniteNumber(b.reviewCount) ?? 0;
     if (cb !== ca) return cb - ca;
+
+    const da = getFiniteNumber(a.distanceKm) ?? Number.POSITIVE_INFINITY;
+    const db = getFiniteNumber(b.distanceKm) ?? Number.POSITIVE_INFINITY;
+    if (da !== db) return da - db;
 
     return String(a.name || "").localeCompare(String(b.name || ""), "ko");
   });
@@ -188,9 +219,13 @@ function sortPartnerFirstByName(vendors: ExpertVendor[]) {
 }
 
 export default function Expert() {
-  const { historyId, issueType, riskScore, areaRatio } = useLocalSearchParams<{ historyId?: string; issueType?: string; riskScore?: string; areaRatio?: string }>();
+  const { historyId, issueType, riskScore, areaRatio } = useLocalSearchParams<{
+    historyId?: string;
+    issueType?: string;
+    riskScore?: string;
+    areaRatio?: string;
+  }>();
 
-  // --- [원본 상태 관리 로직] ---
   const [loading, setLoading] = useState(true);
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [info, setInfo] = useState<ExpertInfo | null>(null);
@@ -204,11 +239,10 @@ export default function Expert() {
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const [requestingLocation, setRequestingLocation] = useState(false);
   const [locationSortEnabled, setLocationSortEnabled] = useState(false);
-  // ref로 최신 좌표를 항상 읽을 수 있게 유지 (loadVendors 클로저 stale 문제 방지)
+
   const userCoordinatesRef = useRef<Coordinates | null>(null);
   const autoLocationDoneRef = useRef(false);
 
-  // --- [원본 데이터 로딩 로직] ---
   useEffect(() => {
     async function load() {
       try {
@@ -224,7 +258,7 @@ export default function Expert() {
             score = h.riskScore ?? score;
             area = h.areaRatio ?? area;
           } catch {
-            // diagnosisId를 historyId로 넘긴 경우 등 API 실패 시 기본값 유지
+            // 기본값 유지
           }
         }
 
@@ -234,7 +268,6 @@ export default function Expert() {
         setResolvedAreaRatio(area);
         setInfo(i);
       } catch {
-        // getExpertInfo는 하드코딩이라 실패 없지만 안전망
         const i = await getExpertInfo("MOLD", undefined, undefined);
         setResolvedIssueType("MOLD");
         setResolvedRiskScore(undefined);
@@ -244,10 +277,10 @@ export default function Expert() {
         setLoading(false);
       }
     }
+
     load();
   }, [historyId, issueType, riskScore, areaRatio]);
 
-  // userCoordinates 상태 변경 시 ref 동기화
   useEffect(() => {
     userCoordinatesRef.current = userCoordinates;
   }, [userCoordinates]);
@@ -259,20 +292,22 @@ export default function Expert() {
         VENDOR_REGIONS.map(async (region): Promise<{ region: VendorRegion; nearestDistance: number }> => {
           const typedRegion = region as VendorRegion;
           const regionCoords = REGION_COORDS[typedRegion];
-          const vendors = await listNearbyCompanies({
+
+          const regionVendors = await listNearbyCompanies({
             latitude: regionCoords.latitude,
             longitude: regionCoords.longitude,
             region,
             keyword: `${region} ${issueKeyword}`.trim(),
           });
 
-          const withDistance = withDistanceFromUser(vendors, coords).filter(
+          const withDistance = withDistanceFromUser(regionVendors, coords).filter(
               (vendor) => vendor.distanceKm != null && Number.isFinite(vendor.distanceKm),
           );
 
-          const nearestDistance = withDistance.length > 0
-              ? Math.min(...withDistance.map((vendor) => vendor.distanceKm ?? Number.POSITIVE_INFINITY))
-              : Number.POSITIVE_INFINITY;
+          const nearestDistance =
+              withDistance.length > 0
+                  ? Math.min(...withDistance.map((vendor) => vendor.distanceKm ?? Number.POSITIVE_INFINITY))
+                  : Number.POSITIVE_INFINITY;
 
           return { region: typedRegion, nearestDistance };
         }),
@@ -290,7 +325,6 @@ export default function Expert() {
       return candidates[0].region;
     }
 
-    // 외부검색이 비어 있으면 지역 중심점 기준으로 fallback.
     return (Object.entries(REGION_COORDS) as [VendorRegion, Coordinates][])
         .map(([region, center]) => ({
           region,
@@ -299,7 +333,6 @@ export default function Expert() {
         .sort((a, b) => a.distance - b.distance)[0]?.region ?? "서울";
   }
 
-  // --- [위치 획득 로직] ---
   async function handleGetCurrentLocation() {
     try {
       setRequestingLocation(true);
@@ -309,7 +342,7 @@ export default function Expert() {
       setUserCoordinates(coords);
       setLocationSortEnabled(true);
 
-      const nextRegion = selectedRegion ?? await findNearestRegionFromVendors(coords);
+      const nextRegion = selectedRegion ?? (await findNearestRegionFromVendors(coords));
       setSelectedRegion(nextRegion);
       setSortKey("distance");
       setSortAscending(true);
@@ -318,6 +351,7 @@ export default function Expert() {
       Alert.alert("위치 확인 완료", "현재 위치 기준으로 가까운 업체를 정렬했습니다.");
     } catch (error: any) {
       const message = String(error?.message ?? "");
+
       if (message === "LOCATION_SERVICE_DISABLED") {
         Alert.alert("위치 서비스 꺼짐", "휴대폰 위치 서비스를 켠 뒤 다시 시도해주세요.");
       } else if (message === "LOCATION_PERMISSION_DENIED") {
@@ -330,71 +364,72 @@ export default function Expert() {
     }
   }
 
-  const loadVendors = useCallback(async (
-      region: string,
-      nextSortKey = sortKey,
-      nextAscending = sortAscending,
-      coords = userCoordinatesRef.current,
-      useDistanceSort = locationSortEnabled,
-  ) => {
-    try {
-      setVendorsLoading(true);
-
-      const regionCoords = REGION_COORDS[region as VendorRegion];
-      const keyword = `${region} ${issueTypeSearchKeyword(resolvedIssueType)}`.trim();
-
-      // 중요: 다른 지역 탭을 눌렀을 때도 외부업체가 보여야 하므로,
-      // 업체 검색 좌표는 항상 해당 지역 중심 좌표를 사용한다.
-      // 단, 거리 계산은 사용자의 실제 현재 위치 coords로 다시 계산한다.
-      if (regionCoords) {
+  const loadVendors = useCallback(
+      async (
+          region: string,
+          nextSortKey = sortKey,
+          nextAscending = sortAscending,
+          coords = userCoordinatesRef.current,
+          useDistanceSort = locationSortEnabled,
+      ) => {
         try {
-          const regionVendors = await listNearbyCompanies({
-            latitude: regionCoords.latitude,
-            longitude: regionCoords.longitude,
+          setVendorsLoading(true);
+
+          const regionCoords = REGION_COORDS[region as VendorRegion];
+          const keyword = `${region} ${issueTypeSearchKeyword(resolvedIssueType)}`.trim();
+
+          if (regionCoords) {
+            try {
+              const regionVendors = await listNearbyCompanies({
+                latitude: regionCoords.latitude,
+                longitude: regionCoords.longitude,
+                region,
+                keyword,
+              });
+
+              if (regionVendors.length > 0) {
+                const enrichedVendors = coords ? withDistanceFromUser(regionVendors, coords) : regionVendors;
+
+                if (nextSortKey === "rating") {
+                  setVendors(sortPartnerFirstByRating(enrichedVendors, nextAscending));
+                } else if (nextSortKey === "distance") {
+                  setVendors(sortPartnerFirstByDistance(enrichedVendors, nextAscending));
+                } else {
+                  setVendors(sortPartnerFirstByName(enrichedVendors));
+                }
+
+                return;
+              }
+            } catch (err) {
+              console.log("지역 중심 업체 조회 실패. 제휴업체 API로 fallback:", err);
+            }
+          }
+
+          const baseVendors = await listExpertVendors({
             region,
-            keyword,
+            issueType: resolvedIssueType,
+            sortKey: nextSortKey,
+            direction: nextAscending ? "asc" : "desc",
           });
 
-          if (regionVendors.length > 0) {
-            const enrichedVendors = coords ? withDistanceFromUser(regionVendors, coords) : regionVendors;
+          const enrichedBaseVendors = coords ? withDistanceFromUser(baseVendors, coords) : baseVendors;
 
-            if (nextSortKey === "rating") {
-              setVendors(sortPartnerFirstByRating(enrichedVendors));
-            } else if (nextSortKey === "distance" && useDistanceSort && coords) {
-              setVendors(sortPartnerFirstByDistance(enrichedVendors));
-            } else {
-              setVendors(sortPartnerFirstByName(enrichedVendors));
-            }
-            return;
+          if (nextSortKey === "rating") {
+            setVendors(sortPartnerFirstByRating(enrichedBaseVendors, nextAscending));
+          } else if (nextSortKey === "distance") {
+            setVendors(sortPartnerFirstByDistance(enrichedBaseVendors, nextAscending));
+          } else {
+            setVendors(sortPartnerFirstByName(enrichedBaseVendors));
           }
-        } catch (err) {
-          console.log("지역 중심 업체 조회 실패. 제휴업체 API로 fallback:", err);
+        } catch {
+          setVendors([]);
+          Alert.alert("조회 실패", "전문업체 API 정보를 확인해주세요.");
+        } finally {
+          setVendorsLoading(false);
         }
-      }
-
-      const baseVendors = await listExpertVendors({
-        region,
-        issueType: resolvedIssueType,
-        sortKey: nextSortKey,
-        direction: nextAscending ? "asc" : "desc",
-      });
-
-      const enrichedBaseVendors = coords ? withDistanceFromUser(baseVendors, coords) : baseVendors;
-
-      if (nextSortKey === "rating") {
-        setVendors(sortPartnerFirstByRating(enrichedBaseVendors));
-      } else if (nextSortKey === "distance" && useDistanceSort && coords) {
-        setVendors(sortPartnerFirstByDistance(enrichedBaseVendors));
-      } else {
-        setVendors(sortPartnerFirstByName(enrichedBaseVendors));
-      }
-    } catch {
-      setVendors([]);
-      Alert.alert("조회 실패", "전문업체 API 정보를 확인해주세요.");
-    } finally {
-      setVendorsLoading(false);
-    }
-  }, [resolvedIssueType, sortKey, sortAscending, locationSortEnabled]);
+      },
+      [resolvedIssueType, sortKey, sortAscending, locationSortEnabled],
+  );
 
   useEffect(() => {
     if (loading || !info || autoLocationDoneRef.current) return;
@@ -417,7 +452,6 @@ export default function Expert() {
 
         await loadVendors(nearestRegion, "distance", true, coords, true);
       } catch {
-        // 위치 권한이 없으면 기본 지역을 보여주되, 거리순이 아니라 가나다순으로 보여준다.
         const fallbackRegion = "서울";
         setSelectedRegion(fallbackRegion);
         setLocationSortEnabled(false);
@@ -431,42 +465,43 @@ export default function Expert() {
   useFocusEffect(
       useCallback(() => {
         if (selectedRegion) {
-          loadVendors(
-              selectedRegion,
-              sortKey,
-              sortAscending,
-              userCoordinatesRef.current,
-              locationSortEnabled,
-          );
+          loadVendors(selectedRegion, sortKey, sortAscending, userCoordinatesRef.current, locationSortEnabled);
         }
-      }, [selectedRegion, sortKey, sortAscending, locationSortEnabled, loadVendors])
+      }, [selectedRegion, sortKey, sortAscending, locationSortEnabled, loadVendors]),
   );
 
-  const handleSortPress = (nextKey: ExpertVendorSort) => {
-    const nextAscending = sortKey === nextKey ? !sortAscending : nextKey === "distance";
+  // 수정된 통합 필터 핸들러
+  const handleToggleSort = (targetKey: ExpertVendorSort) => {
     const coords = userCoordinatesRef.current;
-    const useDistance = nextKey === "distance" && !!coords;
+    const useDistance = targetKey === "distance" && !!coords;
 
-    setSortKey(nextKey);
+    let nextAscending = true;
+
+    if (sortKey === targetKey) {
+      // 동일한 필터를 또 누르면 차순을 반대로 뒤집음 (토글)
+      nextAscending = !sortAscending;
+    } else {
+      // 새로운 필터를 누를 때 기본값 세팅
+      // 거리는 기본 '가까운순(true)', 리뷰는 기본 '높은순(false)'
+      nextAscending = targetKey === "distance";
+    }
+
+    setSortKey(targetKey);
     setSortAscending(nextAscending);
     setLocationSortEnabled(useDistance);
 
     if (selectedRegion) {
-      loadVendors(
-          selectedRegion,
-          nextKey,
-          nextAscending,
-          coords,
-          useDistance,
-      );
+      loadVendors(selectedRegion, targetKey, nextAscending, coords, useDistance);
     }
   };
 
   const vendorsWithDistance = useMemo(() => vendors, [vendors]);
+
   const partnerCount = useMemo(
       () => vendorsWithDistance.filter(isPartnerVendor).length,
       [vendorsWithDistance],
   );
+
   const externalCount = vendorsWithDistance.length - partnerCount;
 
   if (loading || !info) return <ScreenState loading />;
@@ -475,7 +510,6 @@ export default function Expert() {
       <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
 
-        {/* 헤더 */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Feather name="arrow-left" size={20} color={MAIN_BLUE} />
@@ -485,12 +519,11 @@ export default function Expert() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-          {/* 상단 섹션: 견적 정보 카드 */}
           <View style={styles.infoCard}>
             <View style={styles.infoBadge}>
               <Text style={styles.infoBadgeText}>전문가 수리 권장</Text>
             </View>
+
             <Text style={styles.mainTitle}>{issueTypeLabel(resolvedIssueType)} 수리 견적 안내</Text>
 
             <View style={styles.estimateBox}>
@@ -498,7 +531,7 @@ export default function Expert() {
               <Text style={styles.estimateValue}>{info.estimateRange}</Text>
             </View>
 
-            {info.notes && info.notes.length > 0 && (
+            {info.notes && info.notes.length > 0 ? (
                 <View style={styles.notesSection}>
                   <Text style={styles.sectionSmallTitle}>안내 사항</Text>
                   {info.notes.map((n, i) => (
@@ -508,39 +541,30 @@ export default function Expert() {
                       </View>
                   ))}
                 </View>
-            )}
+            ) : null}
           </View>
 
-          {/* 위치 확인 섹션 (디자인 적용) */}
-          <View style={styles.locationBox}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.locationTitle}>내 위치 기준 거리 보기</Text>
-              <Text style={styles.locationDesc}>
-                {userCoordinates ? "현재 위치 기준 거리순으로 표시 중" : "현재 위치를 확인해 가까운 업체를 보여줍니다."}
-              </Text>
-            </View>
-            <Pressable
-                onPress={handleGetCurrentLocation}
-                disabled={requestingLocation}
-                style={[styles.locationBtn, userCoordinates && styles.locationBtnActive]}
-            >
-              <MaterialCommunityIcons
-                  name={requestingLocation ? "loading" : "target"}
-                  size={18}
-                  color={userCoordinates ? "#fff" : MAIN_BLUE}
-              />
-              <Text style={[styles.locationBtnText, userCoordinates && { color: "#fff" }]}>
-                {requestingLocation ? "확인중" : "위치 갱신"}
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* 지역 선택 섹션 */}
           <View style={styles.sectionContainer}>
             <View style={styles.sectionHeader}>
               <Feather name="map-pin" size={18} color={MAIN_BLUE} />
               <Text style={styles.sectionTitle}>지역 선택</Text>
+
+              <Pressable
+                  onPress={handleGetCurrentLocation}
+                  disabled={requestingLocation}
+                  style={[styles.locationBtn, userCoordinates ? styles.locationBtnActive : null]}
+              >
+                <MaterialCommunityIcons
+                    name={requestingLocation ? "loading" : "crosshairs-gps"}
+                    size={14}
+                    color={userCoordinates ? "#fff" : MAIN_BLUE}
+                />
+                <Text style={[styles.locationBtnText, userCoordinates ? { color: "#fff" } : null]}>
+                  {requestingLocation ? "확인중" : userCoordinates ? "위치 갱신" : "내 위치"}
+                </Text>
+              </Pressable>
             </View>
+
             <View style={styles.regionGrid}>
               {VENDOR_REGIONS.map((region) => (
                   <Pressable
@@ -548,41 +572,47 @@ export default function Expert() {
                       onPress={() => {
                         const coords = userCoordinatesRef.current;
                         const useDistance = !!coords;
+
                         setSelectedRegion(region);
                         setSortKey("distance");
                         setSortAscending(true);
                         setLocationSortEnabled(useDistance);
                         loadVendors(region, "distance", true, coords, useDistance);
                       }}
-                      style={[styles.regionChip, selectedRegion === region && styles.regionChipActive]}
+                      style={[styles.regionChip, selectedRegion === region ? styles.regionChipActive : null]}
                   >
-                    <Text style={[styles.regionText, selectedRegion === region && styles.regionTextActive]}>{region}</Text>
+                    <Text style={[styles.regionText, selectedRegion === region ? styles.regionTextActive : null]}>
+                      {region}
+                    </Text>
                   </Pressable>
               ))}
             </View>
           </View>
 
-          {/* 업체 리스트 섹션 */}
           {selectedRegion ? (
               <View style={styles.vendorSection}>
                 <View style={styles.listHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.listCount}>추천 업체 {vendorsWithDistance.length}곳</Text>
-                    {vendorsWithDistance.length > 0 && (
+
+                    {vendorsWithDistance.length > 0 ? (
                         <Text style={styles.listSubCount}>
-                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳{sortKey === "rating" ? " · 별점순" : " · 거리순"}
+                          제휴 {partnerCount}곳 · 외부검색 {externalCount}곳
                         </Text>
-                    )}
+                    ) : null}
                   </View>
+
+                  {/* 2개로 간소화된 토글형 필터 탭 */}
                   <View style={styles.filterRow}>
-                    <Pressable onPress={() => handleSortPress("rating")}>
-                      <Text style={[styles.filterText, sortKey === "rating" && styles.filterActive]}>
-                        별점순{sortKey === "rating" && "↓"}
+                    <Pressable onPress={() => handleToggleSort("distance")} style={styles.filterBtn}>
+                      <Text style={[styles.filterText, sortKey === "distance" && styles.filterActive]}>
+                        {sortKey === "distance" ? (sortAscending ? "가까운순 ▼" : "먼순 ▲") : "거리순"}
                       </Text>
                     </Pressable>
-                    <Pressable onPress={() => handleSortPress("distance")}>
-                      <Text style={[styles.filterText, sortKey === "distance" && styles.filterActive]}>
-                        거리순{sortKey === "distance" && (sortAscending ? "↑" : "↓")}
+
+                    <Pressable onPress={() => handleToggleSort("rating")} style={styles.filterBtn}>
+                      <Text style={[styles.filterText, sortKey === "rating" && styles.filterActive]}>
+                        {sortKey === "rating" ? (sortAscending ? "리뷰낮은순 ▲" : "리뷰높은순 ▼") : "리뷰순"}
                       </Text>
                     </Pressable>
                   </View>
@@ -602,116 +632,143 @@ export default function Expert() {
                       </Text>
                     </View>
                 ) : (
-                    vendorsWithDistance.map((vendor) => (
-                        <View
-                            key={vendor.id}
-                            style={[styles.vendorCard, isPartnerVendor(vendor) && styles.vendorCardPartner]}
-                        >
-                          <View style={styles.vendorMain}>
-                            <View style={styles.vendorInfo}>
-                              <View style={styles.vendorNameRow}>
-                                <Text style={styles.vendorName}>{vendor.name}</Text>
-                                {isPartnerVendor(vendor) ? (
-                                    <View style={styles.partnerBadge}>
-                                      <FontAwesome name="handshake-o" size={11} color="#fff" />
-                                      <Text style={styles.partnerBadgeText}>제휴</Text>
-                                    </View>
-                                ) : (
-                                    <View style={styles.externalBadge}>
-                                      <Text style={styles.externalBadgeText}>외부</Text>
-                                    </View>
-                                )}
-                                {isPartnerVendor(vendor) && (
-                                    <Pressable
-                                        onPress={() => router.push({
-                                          pathname: "/expert-reviews/[vendorId]",
-                                          params: {
-                                            vendorId: vendor.companyId ?? vendor.id,
-                                            vendorName: vendor.name,
-                                            companyId: vendor.companyId,
-                                            readOnly: "true",
-                                            from: "expert",
-                                          },
-                                        } as any)}
-                                        style={({ pressed }) => [styles.reviewButton, pressed && styles.reviewButtonPressed]}
-                                        hitSlop={8}
-                                    >
-                                      <FontAwesome name="star" size={12} color="#fff" />
-                                      <Text style={styles.reviewButtonText}>리뷰 보기</Text>
-                                      <Feather name="chevron-right" size={13} color="#fff" />
-                                    </Pressable>
-                                )}
+                    vendorsWithDistance.map((vendor) => {
+                      const partner = isPartnerVendor(vendor);
+
+                      return (
+                          <View
+                              key={vendor.id}
+                              style={[styles.vendorCard, partner ? styles.vendorCardPartner : null]}
+                          >
+                            <View style={styles.vendorMain}>
+                              <View style={styles.vendorInfo}>
+                                <View style={styles.vendorTopRow}>
+                                  <View style={styles.vendorNameRow}>
+                                    <Text style={styles.vendorName}>{vendor.name}</Text>
+
+                                    {partner ? (
+                                        <View style={styles.partnerBadge}>
+                                          <FontAwesome name="handshake-o" size={11} color="#fff" />
+                                          <Text style={styles.partnerBadgeText}>제휴</Text>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.externalBadge}>
+                                          <Text style={styles.externalBadgeText}>외부</Text>
+                                        </View>
+                                    )}
+                                  </View>
+
+                                  {partner ? (
+                                      <Pressable
+                                          onPress={() =>
+                                              router.push({
+                                                pathname: "/expert-reviews/[vendorId]",
+                                                params: {
+                                                  vendorId: vendor.companyId ?? vendor.id,
+                                                  vendorName: vendor.name,
+                                                  companyId: vendor.companyId,
+                                                  readOnly: "true",
+                                                  from: "expert",
+                                                },
+                                              } as any)
+                                          }
+                                          style={({ pressed }) => [
+                                            styles.reviewButton,
+                                            pressed ? styles.reviewButtonPressed : null,
+                                          ]}
+                                          hitSlop={8}
+                                      >
+                                        <FontAwesome name="star" size={12} color="#fff" />
+                                        <Text style={styles.reviewButtonText}>리뷰 보기</Text>
+                                        <Feather name="chevron-right" size={13} color="#fff" />
+                                      </Pressable>
+                                  ) : null}
+                                </View>
+
+                                <View style={styles.ratingRow}>
+                                  {partner ? (
+                                      <>
+                                        <FontAwesome name="star" size={14} color="#f59e0b" />
+                                        <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
+                                        <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
+                                      </>
+                                  ) : null}
+
+                                  {vendor.distanceKm != null ? (
+                                      <Text style={styles.distanceBadge}>{formatDistanceKm(vendor.distanceKm)}</Text>
+                                  ) : null}
+                                </View>
                               </View>
-                              <View style={styles.ratingRow}>
-                                {isPartnerVendor(vendor) && (
-                                    <>
-                                      <FontAwesome name="star" size={14} color="#f59e0b" />
-                                      <Text style={styles.ratingText}>{formatRating(vendor.avgRating)}</Text>
-                                      <Text style={styles.reviewCount}>({vendor.reviewCount})</Text>
-                                    </>
-                                )}
-                                {vendor.distanceKm != null && (
-                                    <Text style={styles.distanceBadge}>
-                                      {formatDistanceKm(vendor.distanceKm)}
-                                    </Text>
-                                )}
-                              </View>
+
+                              {Number(vendor.minPrice) > 0 ? (
+                                  <Text style={styles.vendorPrice}>
+                                    {formatPrice(vendor.minPrice, vendor.maxPrice)}
+                                  </Text>
+                              ) : null}
                             </View>
-                            <Text style={styles.vendorPrice}>{formatPrice(vendor.minPrice, vendor.maxPrice)}</Text>
+
+                            {vendor.intro ? (
+                                <Text style={styles.vendorIntro} numberOfLines={2}>
+                                  {vendor.intro}
+                                </Text>
+                            ) : null}
+
+                            {vendor.addressLine ? (
+                                <Text style={styles.coverageText}>주소: {vendor.addressLine}</Text>
+                            ) : vendor.coverageAreas.length > 0 ? (
+                                <Text style={styles.coverageText}>활동 지역: {vendor.coverageAreas.join(", ")}</Text>
+                            ) : null}
+
+                            {partner ? (
+                                <Pressable
+                                    onPress={() =>
+                                        router.push({
+                                          pathname: "/expert-booking",
+                                          params: {
+                                            historyId: historyId ? String(historyId) : undefined,
+                                            vendorId: vendor.companyId,
+                                            companyId: vendor.companyId,
+                                            vendorName: vendor.name,
+                                            vendorPhone: vendor.phone,
+                                            vendorIntro: vendor.intro,
+                                            vendorMinPrice: String(vendor.minPrice),
+                                            issueType: resolvedIssueType,
+                                            riskScore: resolvedRiskScore != null ? String(resolvedRiskScore) : undefined,
+                                            areaRatio: resolvedAreaRatio != null ? String(resolvedAreaRatio) : undefined,
+                                          },
+                                        })
+                                    }
+                                    style={styles.bookBtn}
+                                >
+                                  <Text style={styles.bookBtnText}>예약 페이지로 이동</Text>
+                                  <Feather name="chevron-right" size={16} color="#fff" />
+                                </Pressable>
+                            ) : (
+                                <View style={styles.externalActions}>
+                                  <Pressable onPress={() => callVendor(vendor.phone)} style={styles.callBtn}>
+                                    <Feather name="phone" size={15} color="#fff" />
+                                    <Text style={styles.callBtnText}>전화 문의</Text>
+                                  </Pressable>
+
+                                  <Pressable
+                                      onPress={() =>
+                                          openPlaceUrl(
+                                              (vendor as any).placeUrl ??
+                                              (vendor.kakaoPlaceId
+                                                  ? `https://place.map.kakao.com/${vendor.kakaoPlaceId}`
+                                                  : undefined),
+                                          )
+                                      }
+                                      style={styles.kakaoBtn}
+                                  >
+                                    <Text style={styles.kakaoBtnText}>카카오에서 보기</Text>
+                                    <Feather name="external-link" size={15} color="#1e293b" />
+                                  </Pressable>
+                                </View>
+                            )}
                           </View>
-
-                          {vendor.intro ? (
-                              <Text style={styles.vendorIntro} numberOfLines={2}>{vendor.intro}</Text>
-                          ) : null}
-                          {vendor.addressLine ? (
-                              <Text style={styles.coverageText}>주소: {vendor.addressLine}</Text>
-                          ) : vendor.coverageAreas.length > 0 ? (
-                              <Text style={styles.coverageText}>활동 지역: {vendor.coverageAreas.join(", ")}</Text>
-                          ) : null}
-
-                          {isPartnerVendor(vendor) ? (
-                              <Pressable
-                                  onPress={() => router.push({
-                                    pathname: "/expert-booking",
-                                    params: {
-                                      historyId: historyId ? String(historyId) : undefined,
-                                      vendorId: vendor.companyId,
-                                      companyId: vendor.companyId,
-                                      vendorName: vendor.name,
-                                      vendorPhone: vendor.phone,
-                                      vendorIntro: vendor.intro,
-                                      vendorMinPrice: String(vendor.minPrice),
-                                      issueType: resolvedIssueType,
-                                      riskScore: resolvedRiskScore != null ? String(resolvedRiskScore) : undefined,
-                                      areaRatio: resolvedAreaRatio != null ? String(resolvedAreaRatio) : undefined,
-                                    },
-                                  })}
-                                  style={styles.bookBtn}
-                              >
-                                <Text style={styles.bookBtnText}>예약 페이지로 이동</Text>
-                                <Feather name="chevron-right" size={16} color="#fff" />
-                              </Pressable>
-                          ) : (
-                              <View style={styles.externalActions}>
-                                <Pressable
-                                    onPress={() => callVendor(vendor.phone)}
-                                    style={styles.callBtn}
-                                >
-                                  <Feather name="phone" size={15} color="#fff" />
-                                  <Text style={styles.callBtnText}>전화 문의</Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={() => openPlaceUrl((vendor as any).placeUrl ?? (vendor.kakaoPlaceId ? `https://place.map.kakao.com/${vendor.kakaoPlaceId}` : undefined))}
-                                    style={styles.kakaoBtn}
-                                >
-                                  <Text style={styles.kakaoBtnText}>카카오에서 보기</Text>
-                                  <Feather name="external-link" size={15} color="#1e293b" />
-                                </Pressable>
-                              </View>
-                          )}
-                        </View>
-                    ))
+                      );
+                    })
                 )}
               </View>
           ) : (
@@ -720,6 +777,7 @@ export default function Expert() {
                 <Text style={styles.guideText}>지역을 선택하시면{"\n"}가까운 전문 업체를 추천해 드립니다.</Text>
               </View>
           )}
+
           <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
@@ -728,6 +786,7 @@ export default function Expert() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -748,14 +807,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
+
   scrollContent: { padding: 20 },
 
-  // 상단 카드 및 정보
-  infoCard: { backgroundColor: "#fff", borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: "#e2e8f0" },
-  infoBadge: { backgroundColor: "#eff6ff", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: "flex-start", marginBottom: 12 },
+  infoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  infoBadge: {
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
   infoBadgeText: { color: MAIN_BLUE, fontSize: 12, fontWeight: "700" },
   mainTitle: { fontSize: 20, fontWeight: "800", color: "#1e293b", marginBottom: 16 },
-  estimateBox: { backgroundColor: "#f1f5f9", padding: 16, borderRadius: 16, marginBottom: 16 },
+  estimateBox: {
+    backgroundColor: "#f1f5f9",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+  },
   estimateLabel: { fontSize: 13, color: "#64748b", marginBottom: 4 },
   estimateValue: { fontSize: 20, fontWeight: "800", color: MAIN_BLUE },
   notesSection: { gap: 8 },
@@ -763,55 +841,105 @@ const styles = StyleSheet.create({
   bulletRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   bulletText: { fontSize: 14, color: "#64748b", flex: 1 },
 
-  // 위치 확인 섹션
-  locationBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#e2e8f0"
-  },
-  locationTitle: { fontSize: 15, fontWeight: "800", color: "#1e293b" },
-  locationDesc: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
   locationBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#eff6ff",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12
+    backgroundColor: "#EDEDFF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    marginLeft: "auto",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
   },
-  locationBtnActive: { backgroundColor: MAIN_BLUE },
-  locationBtnText: { fontSize: 13, fontWeight: "700", color: MAIN_BLUE },
+  locationBtnActive: { backgroundColor: MAIN_BLUE, borderColor: MAIN_BLUE },
+  locationBtnText: { fontSize: 12, fontWeight: "700", color: MAIN_BLUE },
 
-  // 지역 선택
   sectionContainer: { marginBottom: 24 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: "#1e293b" },
   regionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  regionChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#e2e8f0" },
+  regionChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
   regionChipActive: { backgroundColor: MAIN_BLUE, borderColor: MAIN_BLUE },
   regionText: { fontSize: 14, color: "#64748b", fontWeight: "600" },
   regionTextActive: { color: "#fff" },
 
-  // 업체 리스트
   vendorSection: { gap: 16 },
-  listHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  listHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   listCount: { fontSize: 15, fontWeight: "700", color: "#475569" },
   listSubCount: { fontSize: 12, color: "#94a3b8", marginTop: 2, fontWeight: "600" },
-  filterRow: { flexDirection: "row", gap: 12 },
-  filterText: { fontSize: 13, color: "#94a3b8", fontWeight: "600" },
+
+  // 변경 및 최적화된 스타일 컴포넌트
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12
+  },
+  filterBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  filterText: { fontSize: 13, color: "#94a3b8", fontWeight: "700" },
   filterActive: { color: MAIN_BLUE },
-  vendorCard: { backgroundColor: "#fff", borderRadius: 20, padding: 18, borderWidth: 1, borderColor: "#f1f5f9", elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10 },
-  vendorCardPartner: { borderColor: MAIN_BLUE, borderWidth: 1.5, backgroundColor: "#f8fbff" },
-  vendorMain: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
+
+  vendorCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  vendorCardPartner: {
+    borderColor: MAIN_BLUE,
+    borderWidth: 1.5,
+    backgroundColor: "#f8fbff",
+  },
+  vendorMain: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
   vendorInfo: { flex: 1 },
-  vendorNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" },
+
+  vendorTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 4,
+  },
+  vendorNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    flexWrap: "wrap",
+  },
   vendorName: { fontSize: 17, fontWeight: "800", color: "#1e293b" },
+
   partnerBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -829,6 +957,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   externalBadgeText: { color: "#64748b", fontSize: 11, fontWeight: "700" },
+
   reviewButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -845,16 +974,55 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
-  reviewButtonPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
+  reviewButtonPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
+  },
   reviewButtonText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   ratingText: { fontSize: 14, fontWeight: "700", color: "#1e293b" },
   reviewCount: { fontSize: 12, color: "#94a3b8" },
-  distanceBadge: { fontSize: 12, color: MAIN_BLUE, fontWeight: "700", backgroundColor: "#eff6ff", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  vendorPrice: { fontSize: 16, fontWeight: "800", color: MAIN_BLUE },
-  vendorIntro: { fontSize: 14, color: "#64748b", lineHeight: 20, marginBottom: 8 },
-  coverageText: { fontSize: 12, color: "#94a3b8", marginBottom: 16 },
-  bookBtn: { backgroundColor: "#1e293b", height: 48, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
+  distanceBadge: {
+    fontSize: 12,
+    color: MAIN_BLUE,
+    fontWeight: "700",
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  vendorPrice: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: MAIN_BLUE,
+    marginLeft: 8,
+  },
+  vendorIntro: {
+    fontSize: 14,
+    color: "#64748b",
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  coverageText: {
+    fontSize: 12,
+    color: "#94a3b8",
+    marginBottom: 16,
+  },
+
+  bookBtn: {
+    backgroundColor: "#1e293b",
+    height: 48,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
   bookBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 
   externalActions: { flexDirection: "row", gap: 8 },
@@ -881,9 +1049,30 @@ const styles = StyleSheet.create({
   },
   kakaoBtnText: { color: "#1e293b", fontSize: 14, fontWeight: "800" },
 
-  // 안내/비었을 때
-  guideBox: { padding: 40, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#fff", borderRadius: 24, borderStyle: "dashed", borderWidth: 1, borderColor: "#cbd5e1" },
-  guideText: { textAlign: "center", fontSize: 15, color: "#64748b", lineHeight: 22 },
-  emptyBox: { padding: 40, alignItems: "center", gap: 8 },
-  emptyText: { color: "#94a3b8", fontSize: 14 },
+  guideBox: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  guideText: {
+    textAlign: "center",
+    fontSize: 15,
+    color: "#64748b",
+    lineHeight: 22,
+  },
+  emptyBox: {
+    padding: 40,
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyText: {
+    color: "#94a3b8",
+    fontSize: 14,
+  },
 });

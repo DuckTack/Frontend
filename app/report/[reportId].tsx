@@ -17,7 +17,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
-
+import { apiClient } from "../../src/api/apiClient";
 import ScreenState from "../../src/components/ScreenState";
 import { getMe, Me } from "../../src/api/users";
 import { getHistoryDetail, HistoryDetail } from "../../src/api/histories";
@@ -37,7 +37,7 @@ import {
 } from "../../src/store/reportDraftStorage";
 import { createDesignedReportPdf } from "../../src/utils/reportPdf";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 const MAX_BEFORE_EXTRA_IMAGES = 2;
 const MAX_AFTER_IMAGES = 3;
 
@@ -81,6 +81,111 @@ function createEmptyDraft(): ReportDraft {
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function normalizeBackendFileUrlWithOrigin(value?: unknown, backendOrigin = ""): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (
+      raw.startsWith("data:") ||
+      raw.startsWith("file://") ||
+      raw.startsWith("content://") ||
+      raw.startsWith("asset://") ||
+      raw.startsWith("ph://")
+  ) {
+    return raw;
+  }
+
+  if (backendOrigin) {
+    const storageIndex = raw.indexOf("/storage/");
+    if (storageIndex >= 0) {
+      return `${backendOrigin}${raw.slice(storageIndex)}`;
+    }
+
+    const uploadsIndex = raw.indexOf("/uploads/");
+    if (uploadsIndex >= 0) {
+      return `${backendOrigin}${raw.slice(uploadsIndex)}`;
+    }
+
+    if (raw.startsWith("/")) {
+      return `${backendOrigin}${raw}`;
+    }
+  }
+
+  return raw;
+}
+
+function collectImageUrisWithOrigin(backendOrigin: string, ...values: any[]): string[] {
+  const result: string[] = [];
+
+  for (const value of values) {
+    if (!value) continue;
+
+    if (Array.isArray(value)) {
+      result.push(...collectImageUrisWithOrigin(backendOrigin, ...value));
+      continue;
+    }
+
+    if (typeof value === "object") {
+      result.push(
+          ...collectImageUrisWithOrigin(
+              backendOrigin,
+              value.url,
+              value.uri,
+              value.imageUrl,
+              value.image_url,
+              value.imageUri,
+              value.image_uri,
+              value.diagnosisImageUrl,
+              value.diagnosis_image_url,
+              value.imageUris,
+              value.image_uris,
+              value.beforeImageUris,
+              value.before_image_uris,
+          ),
+      );
+      continue;
+    }
+
+    const normalized = normalizeBackendFileUrlWithOrigin(value, backendOrigin);
+    if (normalized) result.push(normalized);
+  }
+
+  return result;
+}
+
+function getDiagnosisImageUrisFromHistory(historyData: HistoryDetail | null, backendOrigin: string): string[] {
+  const h: any = historyData;
+  if (!h) return [];
+
+  const diagnosisResult =
+      h.diagnosisResult ??
+      h.diagnosis_result ??
+      h.result ??
+      {};
+
+  return uniqueStrings(
+      collectImageUrisWithOrigin(
+          backendOrigin,
+          h.imageUrl,
+          h.image_url,
+          h.imageUri,
+          h.image_uri,
+          h.imageUris,
+          h.image_uris,
+          h.diagnosisImageUrl,
+          h.diagnosis_image_url,
+          h.diagnosisImageUris,
+          h.diagnosis_image_uris,
+          diagnosisResult.imageUrl,
+          diagnosisResult.image_url,
+          diagnosisResult.imageUri,
+          diagnosisResult.image_uri,
+          diagnosisResult.imageUris,
+          diagnosisResult.image_uris,
+      ),
+  );
 }
 
 function cleanAutoValue(value: unknown): string {
@@ -408,8 +513,11 @@ export default function ReportDetail() {
   }, [history, reportId]);
 
   const diagnosisBeforeImageUris = useMemo(
-      () => uniqueStrings([...(history?.imageUris ?? []), ...(cachedDiagnosisImages?.imageUris ?? [])]),
-      [history?.imageUris, cachedDiagnosisImages?.imageUris],
+      () => uniqueStrings([
+        ...getDiagnosisImageUrisFromHistory(history, getBackendOrigin()),
+        ...collectImageUrisWithOrigin(getBackendOrigin(), cachedDiagnosisImages?.imageUris),
+      ]),
+      [history, cachedDiagnosisImages?.imageUris],
   );
 
   const diagnosisBeforeImageKeys = useMemo(
@@ -631,12 +739,34 @@ export default function ReportDetail() {
       setGeneratingPdf(false);
     }
   }
+
+  function getBackendOrigin() {
+    return String(apiClient.defaults.baseURL || "")
+        .replace(/\/api\/?$/, "")
+        .replace(/\/$/, "");
+  }
+
+  function normalizeBackendFileUrl(url?: string | null) {
+    return normalizeBackendFileUrlWithOrigin(url, getBackendOrigin());
+  }
   async function handleOpenPdf() {
     if (!reportBase?.diagnosisId) return;
+
     try {
       const url = await getPdfUrl(reportBase.diagnosisId);
-      if (url) await Linking.openURL(url);
-    } catch {
+      const fixedUrl = normalizeBackendFileUrl(url);
+
+      console.log("PDF original URL:", url);
+      console.log("PDF fixed URL:", fixedUrl);
+
+      if (fixedUrl) {
+        await Linking.openURL(fixedUrl);
+        return;
+      }
+
+      Alert.alert("PDF 없음", "생성된 PDF URL이 없습니다. 먼저 PDF를 생성해주세요.");
+    } catch (e) {
+      console.log("PDF 열기 실패:", e);
       Alert.alert("PDF 열기 실패", "생성된 PDF를 불러오지 못했습니다. 먼저 PDF를 다시 생성해주세요.");
     }
   }
@@ -675,7 +805,7 @@ export default function ReportDetail() {
                 <Text style={styles.cardTitle}>자동 반영 정보</Text>
               </View>
               <View style={styles.badgeContainer}>
-                <View style={[styles.badge, { backgroundColor: '#eff6ff' }]}><Text style={[styles.badgeText, { color: MAIN_BLUE }]}>{fmtIssue(history.issueType)}</Text></View>
+                <View style={[styles.badge, { backgroundColor: '#EDEDFF' }]}><Text style={[styles.badgeText, { color: MAIN_BLUE }]}>{fmtIssue(history.issueType)}</Text></View>
                 <View style={[styles.badge, { backgroundColor: '#fff7ed' }]}><Text style={[styles.badgeText, { color: '#f97316' }]}>위험도 {history.riskScore}</Text></View>
                 <View style={[styles.badge, { backgroundColor: '#f0fdf4' }]}><Text style={[styles.badgeText, { color: '#16a34a' }]}>{fmtRec(history.recommendation)}</Text></View>
               </View>
@@ -778,7 +908,7 @@ export default function ReportDetail() {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
                       {diagnosisBeforeImageUris.map((uri, index) => (
                           <View key={`diagnosis-${uri}-${index}`} style={styles.imagePreviewCard}>
-                            <Image source={{ uri }} style={styles.imagePreview} />
+                            <Image source={{ uri: normalizeBackendFileUrl(uri) }} style={styles.imagePreview} onError={(e) => console.log("리포트 이미지 로드 실패", uri, e.nativeEvent)} />
                             <View style={styles.autoImageBadge}>
                               <Text style={styles.autoImageBadgeText}>진단 사진</Text>
                             </View>
@@ -786,7 +916,7 @@ export default function ReportDetail() {
                       ))}
                       {draft.beforeImageUris.map((uri, index) => (
                           <View key={`before-extra-${uri}-${index}`} style={styles.imagePreviewCard}>
-                            <Image source={{ uri }} style={styles.imagePreview} />
+                            <Image source={{ uri: normalizeBackendFileUrl(uri) }} style={styles.imagePreview} onError={(e) => console.log("리포트 이미지 로드 실패", uri, e.nativeEvent)} />
                             <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("beforeImageUris", index)}>
                               <Ionicons name="close-circle" size={22} color="#ef4444" />
                             </Pressable>
@@ -810,7 +940,7 @@ export default function ReportDetail() {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContent}>
                       {draft.afterImageUris.map((uri, index) => (
                           <View key={`${uri}-${index}`} style={styles.imagePreviewCard}>
-                            <Image source={{ uri }} style={styles.imagePreview} />
+                            <Image source={{ uri: normalizeBackendFileUrl(uri) }} style={styles.imagePreview} onError={(e) => console.log("리포트 이미지 로드 실패", uri, e.nativeEvent)} />
                             <Pressable style={styles.imageRemoveButton} onPress={() => removeImage("afterImageUris", index)}>
                               <Ionicons name="close-circle" size={22} color="#ef4444" />
                             </Pressable>
@@ -866,9 +996,9 @@ const styles = StyleSheet.create({
   noticeBox: {
     flexDirection: "row",
     gap: 8,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#EDEDFF",
     borderWidth: 1,
-    borderColor: "#dbeafe",
+    borderColor: "#C7D2FE",
     borderRadius: 14,
     padding: 12,
     marginBottom: 2,
@@ -879,7 +1009,7 @@ const styles = StyleSheet.create({
   imageSection: { marginTop: 14, gap: 10 },
   imageSectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   imageSectionTitle: { fontSize: 14, fontWeight: "800", color: "#334155" },
-  imageAddButton: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#dbeafe", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  imageAddButton: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#EDEDFF", borderWidth: 1, borderColor: "#C7D2FE", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
   imageAddButtonText: { fontSize: 13, fontWeight: "700", color: MAIN_BLUE },
   imageScrollContent: { gap: 10, paddingRight: 4 },
   imagePreviewCard: { width: 120, height: 120, borderRadius: 16, overflow: "hidden", backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0", position: "relative" },

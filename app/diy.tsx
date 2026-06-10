@@ -23,7 +23,7 @@ import { getDiyGuide, DiyGuide, DiyMaterial } from "../src/api/guides";
 import { IssueType } from "../src/api/histories";
 import { apiClient } from "../src/api/apiClient";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 
 type ProductCategory =
     | "CRACK"
@@ -472,11 +472,13 @@ export default function Diy() {
                       <View style={styles.stepNumberBox}>
                         <Text style={styles.stepNumber}>{i + 1}</Text>
                       </View>
-
                       {i < guide.steps.length - 1 && <View style={styles.stepLine} />}
                     </View>
 
-                    <Text style={styles.stepText}>{s}</Text>
+                    <View style={styles.stepContent}>
+                      <Text style={styles.stepLabel}>STEP {i + 1}</Text>
+                      <Text style={styles.stepText}>{s}</Text>
+                    </View>
                   </View>
               ))}
             </View>
@@ -770,8 +772,8 @@ const styles = StyleSheet.create({
 
   stepRow: {
     flexDirection: "row",
-    gap: 16,
-    minHeight: 64,
+    gap: 14,
+    minHeight: 72,
   },
 
   stepIndicator: {
@@ -779,9 +781,9 @@ const styles = StyleSheet.create({
   },
 
   stepNumberBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: MAIN_BLUE,
     alignItems: "center",
     justifyContent: "center",
@@ -797,16 +799,28 @@ const styles = StyleSheet.create({
   stepLine: {
     width: 2,
     flex: 1,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#EDEDFF",
     marginVertical: 4,
   },
 
-  stepText: {
+  stepContent: {
     flex: 1,
+    paddingTop: 2,
+    paddingBottom: 16,
+  },
+
+  stepLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: MAIN_BLUE,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+
+  stepText: {
     fontSize: 14,
     color: "#334155",
     lineHeight: 22,
-    paddingTop: 2,
   },
 
   cautionCard: {

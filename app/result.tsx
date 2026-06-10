@@ -17,7 +17,7 @@ import ScreenState from "../src/components/ScreenState";
 import { getLastDiagnosisResult, DiagnosisApiResult } from "../src/api/diagnosis";
 import { apiClient } from "../src/api/apiClient";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 
 type ResultViewData = {
   historyId?: string;
@@ -140,24 +140,123 @@ function getRiskLevel(score100: number) {
   return "LOW";
 }
 
-function getImageUrlFromHistory(history: any): string | undefined {
-  if (history?.imageUrl) return history.imageUrl;
-  if (history?.image_url) return history.image_url;
-  if (Array.isArray(history?.imageUris) && history.imageUris.length > 0) return history.imageUris[0];
-  if (Array.isArray(history?.image_uris) && history.image_uris.length > 0) return history.image_uris[0];
-  if (history?.diagnosisResult?.imageUrl) return history.diagnosisResult.imageUrl;
-  if (history?.diagnosisResult?.image_url) return history.diagnosisResult.image_url;
+function getBackendOrigin() {
+  return String(apiClient.defaults.baseURL || "")
+      .replace(/\/api\/?$/, "")
+      .replace(/\/$/, "");
+}
+
+function normalizeBackendFileUrl(value?: unknown): string | undefined {
+  const raw = String(value || "").trim();
+  if (!raw) return undefined;
+
+  if (
+      raw.startsWith("data:") ||
+      raw.startsWith("file://") ||
+      raw.startsWith("content://") ||
+      raw.startsWith("asset://") ||
+      raw.startsWith("ph://")
+  ) {
+    return raw;
+  }
+
+  const backendOrigin = getBackendOrigin();
+
+  if (backendOrigin) {
+    const storageIndex = raw.indexOf("/storage/");
+    if (storageIndex >= 0) {
+      return `${backendOrigin}${raw.slice(storageIndex)}`;
+    }
+
+    const uploadsIndex = raw.indexOf("/uploads/");
+    if (uploadsIndex >= 0) {
+      return `${backendOrigin}${raw.slice(uploadsIndex)}`;
+    }
+
+    if (raw.startsWith("/")) {
+      return `${backendOrigin}${raw}`;
+    }
+  }
+
+  return raw;
+}
+
+function firstImageUrlFromValues(...values: any[]): string | undefined {
+  for (const value of values) {
+    if (!value) continue;
+
+    if (Array.isArray(value)) {
+      const nested = firstImageUrlFromValues(...value);
+      if (nested) return nested;
+      continue;
+    }
+
+    if (typeof value === "object") {
+      const nested = firstImageUrlFromValues(
+          value.url,
+          value.uri,
+          value.imageUrl,
+          value.image_url,
+          value.imageUri,
+          value.image_uri,
+          value.diagnosisImageUrl,
+          value.diagnosis_image_url,
+          value.imageUris,
+          value.image_uris,
+      );
+      if (nested) return nested;
+      continue;
+    }
+
+    const normalized = normalizeBackendFileUrl(value);
+    if (normalized) return normalized;
+  }
 
   return undefined;
 }
 
-function getImageUrlFromDiagnosis(result: any): string | undefined {
-  if (result?.imageUrl) return result.imageUrl;
-  if (result?.image_url) return result.image_url;
-  if (Array.isArray(result?.imageUris) && result.imageUris.length > 0) return result.imageUris[0];
-  if (Array.isArray(result?.image_uris) && result.image_uris.length > 0) return result.image_uris[0];
+function getImageUrlFromHistory(history: any): string | undefined {
+  const diagnosisResult =
+      history?.diagnosisResult ??
+      history?.diagnosis_result ??
+      history?.result ??
+      {};
 
-  return undefined;
+  return firstImageUrlFromValues(
+      history?.imageUrl,
+      history?.image_url,
+      history?.imageUri,
+      history?.image_uri,
+      history?.diagnosisImageUrl,
+      history?.diagnosis_image_url,
+      history?.imageUris,
+      history?.image_uris,
+      history?.diagnosisImageUris,
+      history?.diagnosis_image_uris,
+      diagnosisResult?.imageUrl,
+      diagnosisResult?.image_url,
+      diagnosisResult?.imageUri,
+      diagnosisResult?.image_uri,
+      diagnosisResult?.imageUris,
+      diagnosisResult?.image_uris,
+  );
+}
+
+function getImageUrlFromDiagnosis(result: any): string | undefined {
+  return firstImageUrlFromValues(
+      result?.imageUrl,
+      result?.image_url,
+      result?.imageUri,
+      result?.image_uri,
+      result?.diagnosisImageUrl,
+      result?.diagnosis_image_url,
+      result?.imageUris,
+      result?.image_uris,
+      result?.diagnosisImageUris,
+      result?.diagnosis_image_uris,
+      result?.diagnosisResult?.imageUrl,
+      result?.diagnosisResult?.image_url,
+  );
 }
 
 function mapHistoryToResult(history: any, fallbackHistoryId?: string): ResultViewData {
@@ -428,8 +527,16 @@ export default function Result() {
                   source={{ uri: data.imageUrl }}
                   style={styles.diagnosisImage}
                   resizeMode="cover"
+                  onError={(e) => {
+                    console.log("❌ [RESULT] image load failed:", e.nativeEvent);
+                    console.log("❌ [RESULT] failed image url:", data.imageUrl);
+                  }}
               />
-          ) : null}
+          ) : (
+              <View style={styles.emptyImageBox}>
+                <Text style={styles.emptyImageText}>진단 이미지 URL이 응답되지 않았습니다.</Text>
+              </View>
+          )}
 
           <View style={styles.statusCard}>
             <View style={styles.cardInfoRow}>
@@ -446,18 +553,24 @@ export default function Result() {
                   </View>
                 </View>
 
-                <Text style={styles.subInfoText}>감지된 결함: {data.detectionCount || "-"}개</Text>
-                <Text style={styles.subInfoText}>
-                  {effectiveHistoryId
-                      ? `히스토리 ID: ${effectiveHistoryId}`
-                      : `진단 ID: ${effectiveDiagnosisId}`}
-                </Text>
+                {/* 위험도 게이지 바 */}
+                <View style={styles.gaugeRow}>
+                  <View style={styles.gaugeTrack}>
+                    <View
+                        style={[
+                          styles.gaugeFill,
+                          { width: `${riskScore}%` as any, backgroundColor: severityColor },
+                        ]}
+                    />
+                  </View>
+                  <Text style={[styles.gaugeLabel, { color: severityColor }]}>{riskScore}%</Text>
+                </View>
               </View>
             </View>
 
             <View style={styles.cardFooter}>
-              <View style={[styles.statusBadge, { backgroundColor: "#f0fdf4" }]}>
-                <Text style={[styles.statusBadgeText, { color: "#16a34a" }]}>분석 완료</Text>
+              <View style={[styles.statusBadge, { backgroundColor: "#EDEDFF" }]}>
+                <Text style={[styles.statusBadgeText, { color: MAIN_BLUE }]}>분석 완료</Text>
               </View>
 
               <View style={{ alignItems: "flex-end" }}>
@@ -491,20 +604,17 @@ export default function Result() {
             <View
                 style={[
                   styles.recommendBox,
-                  {
-                    backgroundColor: isDIY ? "#f0fdf4" : "#eff6ff",
-                    borderColor: isDIY ? "#dcfce7" : "#dbeafe",
-                  },
+                  { backgroundColor: "#EDEDFF", borderColor: "#C7D2FE" },
                 ]}
             >
               <View style={styles.recommendHeader}>
                 {isDIY ? (
-                    <MaterialCommunityIcons name="tools" size={24} color="#16a34a" />
+                    <MaterialCommunityIcons name="tools" size={24} color={MAIN_BLUE} />
                 ) : (
                     <Feather name="users" size={24} color={MAIN_BLUE} />
                 )}
 
-                <Text style={[styles.recommendTitle, { color: isDIY ? "#16a34a" : MAIN_BLUE }]}>
+                <Text style={[styles.recommendTitle, { color: MAIN_BLUE }]}>
                   {isDIY ? "DIY 조치 가능" : "전문 업체 의뢰 권장"}
                 </Text>
               </View>
@@ -531,10 +641,7 @@ export default function Result() {
                 <Text
                     style={[
                       styles.infoValue,
-                      {
-                        color: isDIY ? "#16a34a" : MAIN_BLUE,
-                        fontWeight: "700",
-                      },
+                      { color: MAIN_BLUE, fontWeight: "700" },
                     ]}
                 >
                   {isDIY ? "셀프 가이드" : "전문가 연결"}
@@ -544,7 +651,7 @@ export default function Result() {
           </View>
 
           <Pressable
-              style={[styles.actionBtn, { backgroundColor: isDIY ? "#22c55e" : MAIN_BLUE }]}
+              style={[styles.actionBtn, { backgroundColor: MAIN_BLUE }]}
               onPress={isDIY ? goDiy : goExpert}
           >
             <Text style={styles.actionBtnText}>
@@ -615,6 +722,24 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 
+  emptyImageBox: {
+    minHeight: 180,
+    borderRadius: 22,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  emptyImageText: {
+    fontSize: 13,
+    color: "#94a3b8",
+    fontWeight: "700",
+    textAlign: "center",
+  },
   diagnosisImage: {
     width: "100%",
     height: 200,
@@ -674,6 +799,30 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: "800",
+  },
+
+  gaugeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  gaugeTrack: {
+    flex: 1,
+    height: 6,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 99,
+    overflow: "hidden",
+  },
+  gaugeFill: {
+    height: "100%",
+    borderRadius: 99,
+  },
+  gaugeLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    minWidth: 32,
+    textAlign: "right",
   },
 
   subInfoText: {
@@ -856,13 +1005,13 @@ const styles = StyleSheet.create({
   },
 
   choiceButtonLeft: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#dcfce7",
+    backgroundColor: "#EDEDFF",
+    borderColor: "#C7D2FE",
   },
 
   choiceButtonRight: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#dbeafe",
+    backgroundColor: "#EDEDFF",
+    borderColor: "#C7D2FE",
   },
 
   choiceButtonText: {

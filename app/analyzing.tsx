@@ -5,7 +5,7 @@ import { router } from "expo-router";
 import { startDiagnosis } from "../src/api/diagnosis";
 import { showAlert } from "../src/utils/showAlert";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 
 const STEPS = [
   "이미지를 업로드하고 있어요",
@@ -118,9 +118,9 @@ const styles = StyleSheet.create({
     width: 128,
     height: 128,
     borderRadius: 64,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#EDEDFF",
     borderWidth: 2,
-    borderColor: "#bfdbfe",
+    borderColor: "#C7D2FE",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 12,

@@ -79,6 +79,45 @@ export type RemoteReportDraft = {
     updatedAt?: string | null;
 };
 
+function getBackendOrigin() {
+    return String(apiClient.defaults.baseURL || "")
+        .replace(/\/api\/?$/, "")
+        .replace(/\/$/, "");
+}
+
+function normalizeBackendFileUrl(url?: string | null): string {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+
+    if (
+        raw.startsWith("data:") ||
+        raw.startsWith("file://") ||
+        raw.startsWith("content://") ||
+        raw.startsWith("asset://") ||
+        raw.startsWith("ph://")
+    ) {
+        return raw;
+    }
+
+    const backendOrigin = getBackendOrigin();
+
+    if (backendOrigin) {
+        const storageIndex = raw.indexOf("/storage/");
+        if (storageIndex >= 0) return `${backendOrigin}${raw.slice(storageIndex)}`;
+
+        const uploadsIndex = raw.indexOf("/uploads/");
+        if (uploadsIndex >= 0) return `${backendOrigin}${raw.slice(uploadsIndex)}`;
+
+        if (raw.startsWith("/")) return `${backendOrigin}${raw}`;
+    }
+
+    return raw;
+}
+
+function normalizeImageList(values?: string[] | null): string[] {
+    return Array.from(new Set((values || []).map(normalizeBackendFileUrl).filter(Boolean)));
+}
+
 function statusFromHistory(history: HistoryDetail): ReportStatus {
     if (history.status === "FAILED") return "FAILED";
     if (history.report) return "READY";
@@ -156,7 +195,7 @@ export async function getPdfUrl(
     const res = await apiClient.get(
         `/api/reports/diagnosis/${diagnosisId}/pdf-url`
     );
-    return String(res.data?.data ?? res.data);
+    return normalizeBackendFileUrl(String(res.data?.data ?? res.data));
 }
 
 export async function getReportDraft(
@@ -166,7 +205,14 @@ export async function getReportDraft(
         `/api/reports/diagnosis/${diagnosisId}/draft`
     );
 
-    return res.data?.data ?? res.data ?? null;
+    const body = res.data?.data ?? res.data ?? null;
+    if (!body) return null;
+
+    return {
+        ...body,
+        beforeImageUris: normalizeImageList(body.beforeImageUris),
+        afterImageUris: normalizeImageList(body.afterImageUris),
+    };
 }
 
 export async function openReportPdf(
@@ -236,14 +282,14 @@ export async function uploadReportImages(
     const files = Array.isArray(body?.files)
         ? body.files
         : Array.isArray(body)
-          ? body
-          : [];
+            ? body
+            : [];
 
     return files.map((file: any) => {
         const fileKey = typeof file === "string" ? file : file?.fileKey ?? file?.key ?? file?.id ?? "";
         return {
             fileKey: String(fileKey),
-            url: typeof file === "object" && file?.url ? String(file.url) : undefined,
+            url: typeof file === "object" && file?.url ? normalizeBackendFileUrl(String(file.url)) : undefined,
         };
     });
 }

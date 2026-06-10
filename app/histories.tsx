@@ -26,7 +26,7 @@ import {
   ReportStatus,
 } from "../src/api/reports";
 
-const MAIN_BLUE = "#3b82f6";
+const MAIN_BLUE = "#4F46E5";
 const HEADER_BG = "#fff";
 
 function cleanName(value: unknown): string | undefined {
@@ -42,10 +42,28 @@ function cleanName(value: unknown): string | undefined {
 
   return text;
 }
+function formatDate(value?: string | number | null): string {
+  if (value === null || value === undefined || value === "") return "";
 
-function formatDate(value?: string | null): string {
-  if (!value) return "";
-  return String(value).slice(0, 10);
+  let date: Date;
+
+  // 숫자 timestamp 처리: 1781094672 같은 값
+  if (typeof value === "number" || /^\d+$/.test(String(value))) {
+    const num = Number(value);
+
+    // 10자리면 초 단위 timestamp, 13자리면 ms 단위 timestamp
+    date = new Date(num < 1000000000000 ? num * 1000 : num);
+  } else {
+    date = new Date(value);
+  }
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+
+  return `${yyyy}.${mm}.${dd}`;
 }
 
 export default function Histories() {
@@ -498,7 +516,7 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24,
-    paddingTop: 0,
+    paddingTop: 20,
     paddingBottom: 16,
     backgroundColor: HEADER_BG,
   },
@@ -512,7 +530,7 @@ const styles = StyleSheet.create({
   headerSub: {
     fontSize: 14,
     color: "#6b7280",
-    marginTop: 2,
+    marginTop: 4,
   },
 
   filterWrapper: {
